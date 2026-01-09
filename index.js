@@ -66,8 +66,20 @@ const response = await fetch(
       model: "local-model",
       stream: true,
       messages: [
-        { role: "system",content: `You are an expert git protector, which allows the commit to go through or stop it after reviewing the code changes of the project. Here are the project rules:\n${rulesText}, please follwo the rules for output strictly` },
-        { role: "user", content: `I am passing my code changes from my project, there may / maybe not be changes,please let me know, if this is safe to commit, and also summarize the changes,  ${codeChanges}` }
+        { role: "system",
+          content: `You are an expert git protector, 
+          which allows the commit to go through or stop it after 
+          reviewing the code changes of the project. If there are no changes, 
+          return PASS immediately. 
+          Here are the project rules:\n${rulesText},
+          Use <think>...</think> for reasoning.Use <final>...</final> 
+          for the final answer.Only valid JSON is allowed inside <final>. 
+          , please follwo the rules for output strictly` },
+        { role: "user", 
+          content: `I am passing my code changes from my project, 
+          there may / maybe not be changes,please let me know, 
+          if this is safe to commit, and also summarize the changes,  
+          ${codeChanges}` }
       ]
     })
   }

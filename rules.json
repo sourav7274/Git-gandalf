@@ -1,12 +1,6 @@
 {
   "gitSafetyRules": [
     {
-        "id": 0,
-        "rule": "Thiking and final resonse format",
-        "description": "Use <think>...</think> for reasoning.Use <final>...</final> for the final answer.Only valid JSON is allowed inside <final>.",
-        "severity": "low"
-    },
-    {
       "id": 1,
       "rule": "Never commit secrets",
       "description": "Avoid committing API keys, passwords, tokens, or private credentials",
