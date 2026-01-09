@@ -1,13 +1,15 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { readFile } from "fs/promises";
-let command = 'git diff --cached'
+let command = 'git diff --cached --unified=0'
 
 const execAsync = promisify(exec);
 
+let api_key = "dfsdsdfsdfsdf6s987d6f7s6df6s9866s9f"
+
 async function getStagedChanges() {
   try {
-    const { stdout, stderr } = await execAsync("git diff --cached");
+    const { stdout, stderr } = await execAsync(command);
     if (stderr) {
       console.error("stderr:", stderr);
     }
@@ -77,7 +79,7 @@ const response = await fetch(
           }
         ]
       },` },
-        { role: "user", content: `I am passing the git diff of my project, there may / maybe not be changes,please let me know, if this is safe to commit, and also summarize the changes,  ${codeChanges}` }
+        { role: "user", content: `I am passing my code changes from my project, there may / maybe not be changes,please let me know, if this is safe to commit, and also summarize the changes,  ${codeChanges}` }
       ]
     })
   }

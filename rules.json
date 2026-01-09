@@ -55,10 +55,10 @@
       "severity": "none"
     },
     {
-  "id": 10,
-  "rule": "Strict output schema",
-  "description": "The resposne must alway be done using ONLY the following JSON schema. No extra text, no markdown, no explanations. Any deviation is INVALID.\n\nRequired output format:\n{\n  \"verdict\": \"PASS\" | \"BLOCK\",\n  \"severity\": \"LOW\" | \"MEDIUM\" | \"HIGH\",\n  \"summary\": \"string\",\n  \"violations\": [\n    {\n      \"rule_id\": \"string\",\n      \"description\": \"string\",\n      \"files\": [\"string\"],\n      \"lines\": [number]\n    }\n  ]\n}\n\nRules:\n- verdict MUST be PASS or BLOCK (uppercase)\n- severity MUST be LOW, MEDIUM, or HIGH (uppercase)\n- If verdict is PASS, violations MUST be an empty array\n- If unsure, verdict MUST be BLOCK\n- Output MUST be valid JSON only",
-  "severity": "medium"
-  }
+      "id": 10,
+      "rule": "Strict output schema",
+      "description": "The resposne must alway be done using ONLY the following JSON schema. No extra text, no markdown, no explanations. Any deviation is INVALID.\n\nRequired output format:\n{\n  \"verdict\": \"PASS\" | \"BLOCK\",\n  \"severity\": \"LOW\" | \"MEDIUM\"  | \"CRITICAL\",\n  \"summary\": \"string\",\n  \"violations\": [\n    {\n      \"rule\": \"string\",\n      \"description\": \"string\",\n      \"files\": [\"string\"],\n      \"lines\": [number]\n    }\n  ]\n}\n\nRules:\n- verdict MUST be PASS or BLOCK (uppercase)\n- severity MUST be LOW, MEDIUM, HIGH or CRITICAL (uppercase)\n- If verdict is PASS, violations MUST be an empty array\n- If unsure, verdict MUST be BLOCK\n- Output MUST be valid JSON only",
+      "severity": "medium"
+    }
   ]
 }
