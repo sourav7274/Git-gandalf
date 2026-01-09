@@ -64,7 +64,20 @@ const response = await fetch(
       model: "local-model",
       stream: true,
       messages: [
-        { role: "system",content: `You are an expert git protector, which allows the commit to go through or stop it after review the git dif of the project. Here are the project rules:\n${rulesText} , the git diff cached will be passed by user`},
+        { role: "system",content: `You are an expert git protector, which allows the commit to go through or stop it after review the git dif of the project. Here are the project rules:\n${rulesText} , the git diff cached will be passed by user, and your ouput should be this format, {
+        "verdict": "PASS",
+        "severity": "MEDIUM",
+        "summary": "Minor issues detected but not severe enough to block the commit.",
+        "violations": [
+          {
+            "rule_id": "debug-log",
+            "description": "Debug logging added in a production path",
+            "files": ["auth.js"],
+            "lines": [42]
+          }
+        ]
+      }, this is just a exmaple, in my project the fle names will  be different. Always respond in the above JSON format only.
+      ` },
         { role: "user", content: `I am passing the git diff of my project, please let me know, if this is safe to commit, and also summarize the changes,  ${codeChanges}` }
       ]
     })
