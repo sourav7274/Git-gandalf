@@ -70,7 +70,7 @@ const response = await fetch(
           content: `You are an expert git protector, 
           which allows the commit to go through or stop it after 
           reviewing the code changes of the project. If there are no changes, 
-          return PASS immediately. 
+          return PASS immediately, no need to check the rules, just follow the output strcuture json. 
           Here are the project rules:\n${rulesText},
           Use <think>...</think> for reasoning.Use <final>...</final> 
           for the final answer.Only valid JSON is allowed inside <final>. 
