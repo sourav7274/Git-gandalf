@@ -5,7 +5,7 @@ let command = 'git diff --cached --unified=0'
 
 const execAsync = promisify(exec);
 
-let api_key = "dfsdsdfsdfsdf6s987d6f7s6df6s9866s9f"
+let api_key = "dfsdsdfsdfsdf6s987d6f7s6df6s9866s9fguyuyuy"
 
 async function getStagedChanges() {
   try {
@@ -90,7 +90,6 @@ while (true) {
 
     const data = line.slice(5).trim(); // remove "data:"
     if (data === "[DONE]") {
-      console.log("Stream complete");
       process.stdout.write("\n");
       break;
     }

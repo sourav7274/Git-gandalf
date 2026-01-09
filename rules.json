@@ -1,6 +1,12 @@
 {
   "gitSafetyRules": [
     {
+        "id": 0,
+        "rule": "Thiking and final resonse format",
+        "description": "Use <think>...</think> for reasoning.Use <final>...</final> for the final answer.Only valid JSON is allowed inside <final>.",
+        "severity": "low"
+    },
+    {
       "id": 1,
       "rule": "Never commit secrets",
       "description": "Avoid committing API keys, passwords, tokens, or private credentials",
@@ -14,48 +20,24 @@
     },
     {
       "id": 3,
-      "rule": "Review before pushing",
-      "description": "Always review changes before committing and pushing to remote",
+      "rule": "Branch protection rules",
+      "description": "Enable branch protection on main/master to prevent direct commits for all cases",
       "severity": "high"
     },
     {
       "id": 4,
-      "rule": "Use meaningful commit messages",
-      "description": "Write clear, descriptive commit messages for traceability",
-      "severity": "medium"
-    },
-    {
-      "id": 5,
-      "rule": "Branch protection rules",
-      "description": "Enable branch protection on main/master to prevent direct pushes",
-      "severity": "high"
-    },
-    {
-      "id": 6,
       "rule": "No large files",
       "description": "Avoid committing large binary files; use LFS if needed",
       "severity": "medium"
     },
     {
-      "id": 7,
-      "rule": "Sign commits",
-      "description": "Use GPG signing for commit authentication",
-      "severity": "medium"
-    },
-    {
-      "id": 8,
+      "id": 5,
       "rule": "Regular security scans",
       "description": "Scan repository for exposed secrets using tools like GitGuardian",
       "severity": "high"
     },
     {
-      "id": 9,
-      "rule": "Return quick when no changs",
-      "description": "When there is no diff, return the output instantly, no need to thik much",
-      "severity": "none"
-    },
-    {
-      "id": 10,
+      "id": 6,
       "rule": "Strict output schema",
       "description": "The resposne must alway be done using ONLY the following JSON schema. No extra text, no markdown, no explanations. Any deviation is INVALID.\n\nRequired output format:\n{\n  verdict: \"PASS\" | \"BLOCK\",\n  severity: \"LOW\" | \"MEDIUM\"  | \"CRITICAL\",\n  summary: \"string\",\n  violations: [\n    {\n      rule: \"string\",\n      description: \"string\",\n      files: [\"string\"],\n      lines: [number]\n    }\n  ]\n}\n\nRules:\n- verdict MUST be PASS or BLOCK (uppercase)\n- severity MUST be LOW, MEDIUM, HIGH or CRITICAL (uppercase)\n- If verdict is PASS, violations MUST be an empty array\n- If unsure, verdict MUST be BLOCK\n- Output MUST be valid JSON only",
       "severity": "medium"
