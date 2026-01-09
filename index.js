@@ -76,9 +76,8 @@ const response = await fetch(
             "lines": [42]
           }
         ]
-      }, this is just a exmaple and will ot matter for our diff if any . Always respond in the above JSON format only.
-      ` },
-        { role: "user", content: `I am passing the git diff of my project, there may / maybe not be changes, in case of no chnages, pleae exit, stating no chnages, but follow the json structure always , please let me know, if this is safe to commit, and also summarize the changes,  ${codeChanges}` }
+      },` },
+        { role: "user", content: `I am passing the git diff of my project, there may / maybe not be changes,please let me know, if this is safe to commit, and also summarize the changes,  ${codeChanges}` }
       ]
     })
   }
