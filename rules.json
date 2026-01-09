@@ -1,0 +1,52 @@
+{
+    "gitSafetyRules": [
+        {
+            "id": 1,
+            "rule": "Never commit secrets",
+            "description": "Avoid committing API keys, passwords, tokens, or private credentials",
+            "severity": "critical"
+        },
+        {
+            "id": 2,
+            "rule": "Use .gitignore",
+            "description": "Configure .gitignore to exclude sensitive files and dependencies",
+            "severity": "high"
+        },
+        {
+            "id": 3,
+            "rule": "Review before pushing",
+            "description": "Always review changes before committing and pushing to remote",
+            "severity": "high"
+        },
+        {
+            "id": 4,
+            "rule": "Use meaningful commit messages",
+            "description": "Write clear, descriptive commit messages for traceability",
+            "severity": "medium"
+        },
+        {
+            "id": 5,
+            "rule": "Branch protection rules",
+            "description": "Enable branch protection on main/master to prevent direct pushes",
+            "severity": "high"
+        },
+        {
+            "id": 6,
+            "rule": "No large files",
+            "description": "Avoid committing large binary files; use LFS if needed",
+            "severity": "medium"
+        },
+        {
+            "id": 7,
+            "rule": "Sign commits",
+            "description": "Use GPG signing for commit authentication",
+            "severity": "medium"
+        },
+        {
+            "id": 8,
+            "rule": "Regular security scans",
+            "description": "Scan repository for exposed secrets using tools like GitGuardian",
+            "severity": "high"
+        }
+    ]
+}
