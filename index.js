@@ -5,7 +5,7 @@ let command = 'git diff --cached --unified=0'
 
 const execAsync = promisify(exec);
 
-let api_key = "dfsdsdfsdfsdf6s987d6f7s6df6s9866s9fguyuyuy"
+let api_key = "dfsdsdfsdfsdf6s987d6f7s6df6s9866s9fguyuyuyfgdfgd"
 
 async function getStagedChanges() {
   try {
@@ -131,8 +131,13 @@ while (true) {
 // JSON EXTRACTION (robust)
 // -------------------------------
 
-// Find the LAST JSON object in the output
-const jsonStart = fullText.lastIndexOf("{");
+// fullText = the FULL streamed text collected from the LLM
+// make sure you concatenate all tokens into this string
+// e.g. fullText += token;
+
+const separatorIndex = fullText.indexOf("----------------------------------------");
+const searchStart = separatorIndex !== -1 ? separatorIndex : 0;
+const jsonStart = fullText.indexOf("{", searchStart);
 const jsonEnd = fullText.lastIndexOf("}");
 
 if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
@@ -142,28 +147,70 @@ if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
 
 const jsonText = fullText.slice(jsonStart, jsonEnd + 1);
 
-let result;
-try {
-  result = JSON.parse(jsonText);
+// ------------------------------------
+// PARSE + VALIDATE FINAL JSON
+// ------------------------------------
+function parseAndValidateFinalJSON(jsonText) {
+  let result;
 
-  // Validate required schema
-  if (
-    !result.verdict ||
-    !result.severity ||
-    !result.summary ||
-    !Array.isArray(result.violations)
-  ) {
-    throw new Error("Missing required fields");
+  try {
+    result = JSON.parse(jsonText);
+  } catch (err) {
+    console.error("\n❌ Could not parse JSON at all:");
+    console.error(jsonText);
+    process.exit(1);
   }
-} catch (err) {
-  console.error("\n❌ Invalid final JSON:");
-  console.error(jsonText);
+
+  // ✅ CASE 1: Fully valid schema
+  const isValidFinalSchema =
+    typeof result === "object" &&
+    typeof result.verdict === "string" &&
+    typeof result.severity === "string" &&
+    typeof result.summary === "string" &&
+    Array.isArray(result.violations);
+
+  if (isValidFinalSchema) {
+    result.verdict = result.verdict.toUpperCase();
+    result.severity = result.severity.toUpperCase();
+
+    if (!["PASS", "BLOCK"].includes(result.verdict)) {
+      console.error("\n❌ Invalid verdict value:", result.verdict);
+      process.exit(1);
+    }
+
+    return result;
+  }
+
+  // ⚠️ CASE 2: Looks like a single violation object
+  const looksLikeViolation =
+    typeof result === "object" &&
+    (result.rule || result.description || result.files || result.lines);
+
+  if (looksLikeViolation) {
+    console.warn("\n⚠️ Partial LLM response detected. Wrapping into BLOCK.");
+
+    return {
+      verdict: "BLOCK",
+      severity: "HIGH",
+      summary: "Model returned an invalid response format. Treating as violation.",
+      violations: [result]
+    };
+  }
+
+  // ❌ CASE 3: Completely unrecognized structure
+  console.error("\n❌ Unrecognized JSON structure from model:");
+  console.error(result);
   process.exit(1);
 }
 
-// -------------------------------
+// ------------------------------------
+// EXECUTION
+// ------------------------------------
+const result = parseAndValidateFinalJSON(jsonText);
+
+// ------------------------------------
 // ACT BASED ON VERDICT
-// -------------------------------
+// ------------------------------------
 if (result.verdict === "BLOCK") {
   console.error("\n🚫 Commit BLOCKED:", result.summary);
   process.exit(1);
@@ -174,6 +221,8 @@ if (result.verdict === "PASS") {
   process.exit(0);
 }
 
-// Safety fallback
+// ------------------------------------
+// SAFETY FALLBACK (should never happen)
+// ------------------------------------
 console.error("\n❌ Unknown verdict. Blocking commit.");
 process.exit(1);
