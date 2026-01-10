@@ -25,6 +25,12 @@ async function getStagedChanges() {
 const codeChanges = await getStagedChanges();
 // console.log("Staged code changes:", codeChanges);
 
+// Early exit if no changes - saves LLM call
+if (codeChanges === "There are no staged changes.") {
+  console.log("✅ No staged changes detected. Commit allowed.");
+  process.exit(0);
+}
+
 
 // rules reading
 async function readRules(path) {
@@ -64,19 +70,21 @@ const response = await fetch(
     },
     body: JSON.stringify({
       model: "local-model",
-      stream: true,
+      stream: false,
       messages: [
         { role: "system",
-          content: `You are an expert git protector, 
-          which allows the commit to go through or stop it after 
-          reviewing the code changes of the project. If there are no changes, 
-          return PASS immediately, no need to check the rules, just follow the output strcuture json. 
-          Here are the project rules:\n${rulesText}
-          Use <think>...</think> for reasoning. Output format:
-          1. Your reasoning and analysis
-          2. A line with exactly: ----------------------------------------
-          3. On a new line, the final JSON
-          Only valid JSON is allowed below ----------------------------------------. Please follow the rules for output strictly` },
+          content: `You are a git security guard. Review code changes against these rules:
+${rulesText}
+
+IMPORTANT: If there are no changes, return PASS immediately.
+
+Output ONLY valid JSON (no extra text, no thinking, no separator):
+{
+  "verdict": "PASS" | "BLOCK",
+  "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+  "summary": "brief description",
+  "violations": []
+}` },
         { role: "user", 
           content: `I am passing my code changes from my project, 
           there may / maybe not be changes, please let me know 
@@ -87,45 +95,9 @@ const response = await fetch(
   }
 );
 
-// STREAMING LOGIC (NO <final> TAGS ANYMORE)
-const reader = response.body.getReader();
-const decoder = new TextDecoder();
-
-let buffer = "";
-let fullText = "";
-
-while (true) {
-  const { value, done } = await reader.read();
-  if (done) break;
-
-  buffer += decoder.decode(value, { stream: true });
-
-  const lines = buffer.split("\n");
-  buffer = lines.pop(); // keep incomplete line
-
-  for (const line of lines) {
-    if (!line.startsWith("data:")) continue;
-
-    const data = line.slice(5).trim();
-    if (data === "[DONE]") break;
-
-    let json;
-    try {
-      json = JSON.parse(data);
-    } catch {
-      continue;
-    }
-
-    const token = json.choices?.[0]?.delta?.content;
-    if (!token) continue;
-
-    // 1️⃣ Print everything as it streams
-    process.stdout.write(token);
-
-    // 2️⃣ Accumulate everything for JSON extraction
-    fullText += token;
-  }
-}
+// Simple non-streaming response
+const data = await response.json();
+const fullText = data.choices[0].message.content;
 
 // -------------------------------
 // JSON EXTRACTION (robust)
@@ -135,17 +107,33 @@ while (true) {
 // make sure you concatenate all tokens into this string
 // e.g. fullText += token;
 
-const separatorIndex = fullText.indexOf("----------------------------------------");
-const searchStart = separatorIndex !== -1 ? separatorIndex : 0;
-const jsonStart = fullText.indexOf("{", searchStart);
-const jsonEnd = fullText.lastIndexOf("}");
+// More robust JSON extraction - find complete JSON object
+let jsonText = "";
+let jsonStart = fullText.indexOf("{");
 
-if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
-  console.error("\n❌ No final JSON found in output. Blocking commit.");
+if (jsonStart === -1) {
+  console.error("\n❌ No JSON found in output. Blocking commit.");
   process.exit(1);
 }
 
-const jsonText = fullText.slice(jsonStart, jsonEnd + 1);
+// Find matching closing brace by counting braces
+let braceCount = 0;
+let jsonEnd = -1;
+for (let i = jsonStart; i < fullText.length; i++) {
+  if (fullText[i] === '{') braceCount++;
+  if (fullText[i] === '}') braceCount--;
+  if (braceCount === 0) {
+    jsonEnd = i;
+    break;
+  }
+}
+
+if (jsonEnd === -1) {
+  console.error("\n❌ No complete JSON found in output. Blocking commit.");
+  process.exit(1);
+}
+
+jsonText = fullText.slice(jsonStart, jsonEnd + 1);
 
 // ------------------------------------
 // PARSE + VALIDATE FINAL JSON
