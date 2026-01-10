@@ -71,34 +71,28 @@ const response = await fetch(
           which allows the commit to go through or stop it after 
           reviewing the code changes of the project. If there are no changes, 
           return PASS immediately, no need to check the rules, just follow the output strcuture json. 
-          Here are the project rules:\n${rulesText},
-          Use <think>...</think> for reasoning.Use <final>...</final> 
-          for the final answer.Only valid JSON is allowed inside <final>. 
-          , please follwo the rules for output strictly` },
+          Here are the project rules:\n${rulesText}
+          Use <think>...</think> for reasoning. Output format:
+          1. Your reasoning and analysis
+          2. A line with exactly: ----------------------------------------
+          3. On a new line, the final JSON
+          Only valid JSON is allowed below ----------------------------------------. Please follow the rules for output strictly` },
         { role: "user", 
           content: `I am passing my code changes from my project, 
-          there may / maybe not be changes,please let me know, 
-          if this is safe to commit, and also summarize the changes,  
+          there may / maybe not be changes, please let me know 
+          if this is safe to commit, and also summarize the changes:
           ${codeChanges}` }
       ]
     })
   }
 );
 
-
-// STREAMING LOGIC
+// STREAMING LOGIC (NO <final> TAGS ANYMORE)
 const reader = response.body.getReader();
 const decoder = new TextDecoder();
 
 let buffer = "";
-
-// --- FINAL DETECTION STATE ---
-let inFinal = false;
-let finalDone = false;
-let finalBuffer = "";
-
-const FINAL_OPEN = "<final>";
-const FINAL_CLOSE = "</final>";
+let fullText = "";
 
 while (true) {
   const { value, done } = await reader.read();
@@ -119,65 +113,57 @@ while (true) {
     try {
       json = JSON.parse(data);
     } catch {
-      continue; // skip non-JSON chunks
+      continue;
     }
 
     const token = json.choices?.[0]?.delta?.content;
     if (!token) continue;
 
-    // 1️⃣ Show text as it streams
+    // 1️⃣ Print everything as it streams
     process.stdout.write(token);
 
-    // 2️⃣ Detect <final> start
-    if (!inFinal && token.includes(FINAL_OPEN)) {
-      inFinal = true;
-      finalBuffer = token.slice(token.indexOf(FINAL_OPEN));
-      continue;
-    }
-
-    // 3️⃣ Collect tokens inside <final>
-    if (inFinal) {
-      finalBuffer += token;
-
-      // Detect </final> end
-      if (finalBuffer.includes(FINAL_CLOSE)) {
-        finalDone = true;
-        break;
-      }
-    }
+    // 2️⃣ Accumulate everything for JSON extraction
+    fullText += token;
   }
-
-  if (finalDone) break;
 }
 
-// --- SAFETY CHECK ---
-if (!finalDone) {
-  console.error("\n❌ No <final> block found. Blocking commit.");
+// -------------------------------
+// JSON EXTRACTION (robust)
+// -------------------------------
+
+// Find the LAST JSON object in the output
+const jsonStart = fullText.lastIndexOf("{");
+const jsonEnd = fullText.lastIndexOf("}");
+
+if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
+  console.error("\n❌ No final JSON found in output. Blocking commit.");
   process.exit(1);
 }
 
-// --- CLEAN FINAL JSON ---
-const cleaned = finalBuffer
-  .replace(/<final>/g, "")
-  .replace(/<\/final>/g, "")
-  .trim();
+const jsonText = fullText.slice(jsonStart, jsonEnd + 1);
 
-// --- PARSE JSON ---
 let result;
 try {
-  result = JSON.parse(cleaned);
+  result = JSON.parse(jsonText);
 
-  // Validate required fields
-  if (!result.verdict || !result.summary || !Array.isArray(result.violations)) {
-    throw new Error("Missing required fields in <final> JSON");
+  // Validate required schema
+  if (
+    !result.verdict ||
+    !result.severity ||
+    !result.summary ||
+    !Array.isArray(result.violations)
+  ) {
+    throw new Error("Missing required fields");
   }
 } catch (err) {
-  console.error("\n❌ Invalid JSON inside <final> or missing fields:");
-  console.error(cleaned);
+  console.error("\n❌ Invalid final JSON:");
+  console.error(jsonText);
   process.exit(1);
 }
 
-// --- ACT BASED ON VERDICT ---
+// -------------------------------
+// ACT BASED ON VERDICT
+// -------------------------------
 if (result.verdict === "BLOCK") {
   console.error("\n🚫 Commit BLOCKED:", result.summary);
   process.exit(1);
@@ -188,8 +174,6 @@ if (result.verdict === "PASS") {
   process.exit(0);
 }
 
-// Catch-all safety (should never reach here)
-console.error("\n❌ Unexpected verdict. Blocking commit by default.");
+// Safety fallback
+console.error("\n❌ Unknown verdict. Blocking commit.");
 process.exit(1);
-
-
