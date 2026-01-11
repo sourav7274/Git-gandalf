@@ -148,14 +148,22 @@ try {
 // JSON EXTRACTION (robust)
 // -------------------------------
 
-// 1. Try splitting by separator
-const parts = fullText.split('--------------');
-let jsonTextCandidate = parts.length > 1 ? parts[parts.length - 1] : fullText;
+// 1. Try splitting by separator (allow variable length dashes)
+const parts = fullText.split(/-{3,}/);
+// Take the last part that contains a '{'
+let jsonTextCandidate = fullText;
+for (let i = parts.length - 1; i >= 0; i--) {
+  if (parts[i].includes('{')) {
+    jsonTextCandidate = parts[i];
+    break;
+  }
+}
 
 // 2. Find JSON object within the candidate text
 const jsonStart = jsonTextCandidate.indexOf("{");
 if (jsonStart === -1) {
   console.error("\n❌ No JSON found in output. Blocking commit.");
+  console.error("DEBUG: fullText was:", fullText);
   process.exit(1);
 }
 
@@ -176,7 +184,12 @@ if (jsonEnd === -1) {
   process.exit(1);
 }
 
-const finalJsonText = jsonTextCandidate.slice(jsonStart, jsonEnd + 1);
+let finalJsonText = jsonTextCandidate.slice(jsonStart, jsonEnd + 1);
+
+// Remove comments from JSON (// ...)
+finalJsonText = finalJsonText.replace(/\/\/.*$/gm, '');
+// Remove trailing commas (simple case)
+finalJsonText = finalJsonText.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
 
 // ------------------------------------
 // PARSE + VALIDATE FINAL JSON

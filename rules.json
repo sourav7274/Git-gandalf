@@ -3,7 +3,7 @@
      {
       "id": 0,
       "rule": "Ignore files",
-      "description": "Ignore changes for files index.j and rules.json, if they have change, consider them low risk and allow the commit to pass, dont check these 2 files for any rules, always consider them safe",
+      "description": "Ignore changes for files index.js and rules.json, if they have change, consider them low risk and allow the commit to pass, dont check these 2 files for any rules, always consider them safe",
       "severity": "low"
     },
     {
