@@ -72,34 +72,33 @@ const response = await fetch(
       messages: [
         { role: "system",
           content: `You are a git security guard. Review code changes against these rules:
-${rulesText}
+          ${rulesText}
+          Follow the rules in ascending order of ids.
+          Analyze the code changes first. You can provide a brief explanation or reasoning for your decision.
+          After your analysis, you MUST output this exact separator line:
+          --------------
 
-Analyze the code changes first. You can provide a brief explanation or reasoning for your decision.
-After your analysis, you MUST output this exact separator line:
---------------
+          Then, immediately after the separator, output the STRICT JSON object with the verdict. 
 
-Then, immediately after the separator, output the STRICT JSON object with the verdict. 
+          Example Output:
+          Analysis: The code contains a secret...
+          --------------
+          {
+            "verdict": "BLOCK",
+            ...
+          }
 
-Example Output:
-Analysis: The code contains a secret...
---------------
-{
-  "verdict": "BLOCK",
-  ...
-}
-
-JSON Schema:
-{
-  "verdict": "PASS" | "BLOCK",
-  "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
-  "summary": "brief description",
-  "violations": []
-}` },
+          JSON Schema:
+          {
+            "verdict": "PASS" | "BLOCK",
+            "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+            "summary": "brief description",
+            "violations": []
+          }` },
         { role: "user", 
           content: `I am passing my code changes from my project, 
           there may / maybe not be changes, please let me know 
-          if this is safe to commit, and also summarize the changes:
-          ${codeChanges}` }
+          if this is safe to commit ${codeChanges}` }
       ]
     })
   }
