@@ -5,8 +5,6 @@ let command = 'git diff --cached --unified=0'
 
 const execAsync = promisify(exec);
 
-let api_key = "dfsdsdfsdfsdf6s987d6f7s6df6s9866s9fguyuyuyfgdfgd"
-
 async function getStagedChanges() {
   try {
     const { stdout, stderr } = await execAsync(command);
@@ -70,15 +68,27 @@ const response = await fetch(
     },
     body: JSON.stringify({
       model: "local-model",
-      stream: false,
+      stream: true,
       messages: [
         { role: "system",
           content: `You are a git security guard. Review code changes against these rules:
 ${rulesText}
 
-IMPORTANT: If there are no changes, return PASS immediately.
+Analyze the code changes first. You can provide a brief explanation or reasoning for your decision.
+After your analysis, you MUST output this exact separator line:
+--------------
 
-Output ONLY valid JSON (no extra text, no thinking, no separator):
+Then, immediately after the separator, output the STRICT JSON object with the verdict. 
+
+Example Output:
+Analysis: The code contains a secret...
+--------------
+{
+  "verdict": "BLOCK",
+  ...
+}
+
+JSON Schema:
 {
   "verdict": "PASS" | "BLOCK",
   "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
@@ -95,33 +105,68 @@ Output ONLY valid JSON (no extra text, no thinking, no separator):
   }
 );
 
-// Simple non-streaming response
-const data = await response.json();
-const fullText = data.choices[0].message.content;
+// Stream handling
+const reader = response.body.getReader();
+const decoder = new TextDecoder("utf-8");
+let fullText = "";
+let buffer = "";
+
+process.stdout.write("Analyzing changes...\n");
+
+try {
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    
+    // Decode chunk and append to buffer
+    const chunk = decoder.decode(value, { stream: true });
+    buffer += chunk;
+    
+    // Split buffer by newlines
+    const lines = buffer.split('\n');
+    
+    // Keep the last segment in the buffer (it might be incomplete)
+    buffer = lines.pop(); 
+    
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (trimmedLine.startsWith('data: ') && trimmedLine !== 'data: [DONE]') {
+        try {
+          const data = JSON.parse(trimmedLine.slice(6));
+          const content = data.choices[0]?.delta?.content || "";
+          process.stdout.write(content);
+          fullText += content;
+        } catch (e) {
+          // ignore parse errors for partial chunks (shouldn't happen with buffering)
+        }
+      }
+    }
+  }
+} catch (err) {
+  console.error("Error reading stream:", err);
+}
 
 // -------------------------------
 // JSON EXTRACTION (robust)
 // -------------------------------
 
-// fullText = the FULL streamed text collected from the LLM
-// make sure you concatenate all tokens into this string
-// e.g. fullText += token;
+// 1. Try splitting by separator
+const parts = fullText.split('--------------');
+let jsonTextCandidate = parts.length > 1 ? parts[parts.length - 1] : fullText;
 
-// More robust JSON extraction - find complete JSON object
-let jsonText = "";
-let jsonStart = fullText.indexOf("{");
-
+// 2. Find JSON object within the candidate text
+const jsonStart = jsonTextCandidate.indexOf("{");
 if (jsonStart === -1) {
   console.error("\n❌ No JSON found in output. Blocking commit.");
   process.exit(1);
 }
 
-// Find matching closing brace by counting braces
+// Find matching closing brace
 let braceCount = 0;
 let jsonEnd = -1;
-for (let i = jsonStart; i < fullText.length; i++) {
-  if (fullText[i] === '{') braceCount++;
-  if (fullText[i] === '}') braceCount--;
+for (let i = jsonStart; i < jsonTextCandidate.length; i++) {
+  if (jsonTextCandidate[i] === '{') braceCount++;
+  if (jsonTextCandidate[i] === '}') braceCount--;
   if (braceCount === 0) {
     jsonEnd = i;
     break;
@@ -133,7 +178,7 @@ if (jsonEnd === -1) {
   process.exit(1);
 }
 
-jsonText = fullText.slice(jsonStart, jsonEnd + 1);
+const finalJsonText = jsonTextCandidate.slice(jsonStart, jsonEnd + 1);
 
 // ------------------------------------
 // PARSE + VALIDATE FINAL JSON
@@ -194,7 +239,7 @@ function parseAndValidateFinalJSON(jsonText) {
 // ------------------------------------
 // EXECUTION
 // ------------------------------------
-const result = parseAndValidateFinalJSON(jsonText);
+const result = parseAndValidateFinalJSON(finalJsonText);
 
 // ------------------------------------
 // ACT BASED ON VERDICT
