@@ -122,10 +122,12 @@ EVALUATION LOGIC:
 1. Read the rules below.
 2. Apply Rule id 0 first.
 3. If Rule id 0 does not apply, evaluate remaining rules in ascending order.
-4. If a HIGH or CRITICAL rule is violated:
+4. IMPORTANT: The input is a git diff. Lines starting with + are ADDITIONS, lines starting with - are DELETIONS.
+5. ONLY flag secrets in ADDED lines (lines starting with +). Deletions of secrets are SAFE and should be ALLOWED.
+6. If a HIGH or CRITICAL rule is violated in ADDED lines:
    → Immediately return BLOCK.
    → Do NOT evaluate further rules.
-5. Detect secrets ONLY from the actual staged diff content.
+7. Detect secrets ONLY from the actual staged diff content in ADDED lines.
 
 OUTPUT RULES (NON-NEGOTIABLE):
 - Output MUST be a SINGLE valid JSON object.
