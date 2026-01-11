@@ -97,8 +97,7 @@ const response = await fetch(
           }` },
         { role: "user", 
           content: `I am passing my code changes from my project, 
-          there may / maybe not be changes, please let me know 
-          if this is safe to commit ${codeChanges}` }
+          there may / maybe not be changes, please let me know ${codeChanges}` }
       ]
     })
   }
