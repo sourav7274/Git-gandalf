@@ -286,6 +286,11 @@ function parseAndValidateFinalJSON(jsonText) {
       result.severity = "LOW";
   }
 
+  // Ensure violations exists
+  if (!result.violations) {
+      result.violations = [];
+  }
+
   // ✅ CASE 1: Fully valid schema
   const isValidFinalSchema =
     typeof result === "object" &&
