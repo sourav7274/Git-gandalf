@@ -46,6 +46,39 @@ const myRules = await readRules('rules.json');
 // console.log("Loaded rules:", myRules.gitSafetyRules);  
 
 
+// ------------------------------------
+// RULE 0 ENFORCEMENT (JS-side, no LLM)
+// ------------------------------------
+function diffOnlyTouchesSafeFiles(diffText) {
+  const touchedFiles = new Set();
+
+  const lines = diffText.split("\n");
+  for (const line of lines) {
+    if (line.startsWith("+++ b/") || line.startsWith("--- a/")) {
+      const file = line.slice(6).trim();
+      if (file !== "/dev/null") {
+        touchedFiles.add(file);
+      }
+    }
+  }
+
+  // Safety: if we cannot detect files, do NOT bypass LLM
+  if (touchedFiles.size === 0) return false;
+
+  for (const file of touchedFiles) {
+    if (file !== "index.js" && file !== "rules.json") {
+      return false;
+    }
+  }
+
+  return true;
+}
+if (diffOnlyTouchesSafeFiles(codeChanges)) {
+  console.log("✅ Commit ALLOWED: Only index.js or rules.json changed.");
+  process.exit(0);
+}
+
+
 
 
 // llm call 
@@ -71,25 +104,39 @@ const response = await fetch(
       stream: true,
       messages: [
         { role: "system",
-          content: `You are a Git pre-commit security validator.
+          content: `
+            /no_think
+MODE: STRICT_JSON_ONLY
 
-CRITICAL: ALWAYS check Rule id 0 FIRST before any other analysis.
+You are a Git pre-commit security validator.
+You MUST behave like a deterministic machine, not a chat assistant.
 
-YOUR TASK:
-1. Read the rules below carefully
-2. Rule id 0 has HIGHEST PRIORITY - apply it FIRST
-3. If Rule id 0 applies, immediately return PASS without further analysis
-4. Otherwise, evaluate the staged code changes against the remaining rules in ascending order
-5. Detect API keys, tokens, passwords, private keys, and credentials in the actual code changes
-6. If a HIGH or CRITICAL rule is violated, immediately return BLOCK
+ABSOLUTE PRIORITY RULE:
+- Rule id 0 MUST be evaluated FIRST.
+- If changes are ONLY in index.js or rules.json:
+  → Immediately return PASS.
+  → Do NOT analyze anything else.
+  → Do NOT list any violations.
 
-STRICT OUTPUT RULES:
-- Output ONLY valid JSON
-- Do NOT include explanations, reasoning, comments, or extra text
-- Do NOT use markdown code blocks
-- If unsure about any rule, verdict MUST be BLOCK
+EVALUATION LOGIC:
+1. Read the rules below.
+2. Apply Rule id 0 first.
+3. If Rule id 0 does not apply, evaluate remaining rules in ascending order.
+4. If a HIGH or CRITICAL rule is violated:
+   → Immediately return BLOCK.
+   → Do NOT evaluate further rules.
+5. Detect secrets ONLY from the actual staged diff content.
 
-Required JSON schema:
+OUTPUT RULES (NON-NEGOTIABLE):
+- Output MUST be a SINGLE valid JSON object.
+- Do NOT use markdown.
+- Do NOT use code fences.
+- Do NOT include explanations, reasoning, analysis, or comments.
+- Do NOT include text before or after the JSON.
+- Every JSON key MUST be followed by a comma EXCEPT the last one.
+- If unsure about anything, verdict MUST be BLOCK.
+
+JSON SCHEMA (MUST MATCH EXACTLY):
 {
   "verdict": "PASS" | "BLOCK",
   "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
@@ -104,16 +151,17 @@ Required JSON schema:
   ]
 }
 
-Additional constraints:
-- If verdict is PASS, violations MUST be an empty array
-- Use severity LOW by default if no violations exist
-- Always return the JSON object. Nothing else.
+CONSTRAINTS:
+- If verdict is PASS → violations MUST be []
+- If no violations → severity MUST be LOW
+- Always return the JSON object. NOTHING ELSE.
 
-Rules:
-${rulesText}` },
+RULES:
+${rulesText}
+          ` },
         { role: "user", 
-          content: `I am passing my code changes from my project, 
-          there may / maybe not be changes, Staged git diff: ${codeChanges}` }
+          content: `Staged git diff:${codeChanges}
+` }
       ]
     })
   }

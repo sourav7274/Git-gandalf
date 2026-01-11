@@ -15,7 +15,7 @@
     {
       "id": 2,
       "rule": "Never commit secrets",
-      "description": "If any API keys, passwords, tokens, private keys, or credentials are detected, this is a CRITICAL violation.",
+      "description": "Block commits containing hardcoded credentials or sensitive authentication data.",
       "severity": "critical"
     },
     {
