@@ -71,33 +71,44 @@ const response = await fetch(
       stream: true,
       messages: [
         { role: "system",
-          content: `You are a git security guard. Review code changes against these rules:
-          ${rulesText}
-          Follow the rules in ascending order of ids.
-          Analyze the code changes first. You can provide a brief explanation or reasoning for your decision.
-          After your analysis, you MUST output this exact separator line:
-          --------------
+          content: `You are a Git pre-commit security validator.
+          Your task:
+          - Evaluate the staged code changes against the rules below.
+          - Process rules strictly in ascending order of rule id.
+          - If a HIGH or CRITICAL rule is violated, immediately return BLOCK.
+          - If only index.js or rules.json are changed, immediately return PASS.
 
-          Then, immediately after the separator, output the STRICT JSON object with the verdict. 
+        STRICT OUTPUT RULES:
+        - Output ONLY valid JSON.
+        - Do NOT include explanations, reasoning, comments, or extra text.
+        - Do NOT use markdown.
+        - If unsure about any rule, verdict MUST be BLOCK.
 
-          Example Output:
-          Analysis: The code contains a secret...
-          --------------
-          {
-            "verdict": "BLOCK",
-            ...
-          }
+        Required JSON schema:
+        {
+          "verdict": "PASS" | "BLOCK",
+          "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+          "summary": "string",
+          "violations": [
+            {
+              "rule": "string",
+              "description": "string",
+              "files": ["string"],
+              "lines": [number]
+            }
+          ]
+        }
 
-          JSON Schema:
-          {
-            "verdict": "PASS" | "BLOCK",
-            "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
-            "summary": "brief description",
-            "violations": []
-          }` },
+        Additional constraints:
+        - If verdict is PASS, violations MUST be an empty array.
+        - Use severity LOW by default if no violations exist.
+        - Always return the JSON object. Nothing else.
+
+        Rules:
+        ${rulesText}` },
         { role: "user", 
           content: `I am passing my code changes from my project, 
-          there may / maybe not be changes, please let me know ${codeChanges}` }
+          there may / maybe not be changes, Staged git diff: ${codeChanges}` }
       ]
     })
   }
@@ -150,14 +161,19 @@ try {
 
 // 1. Try splitting by separator (allow variable length dashes)
 const parts = fullText.split(/-{3,}/);
-// Take the last part that contains a '{'
+// Take the last part that contains a '{' (or just use fullText if no separator)
 let jsonTextCandidate = fullText;
-for (let i = parts.length - 1; i >= 0; i--) {
-  if (parts[i].includes('{')) {
-    jsonTextCandidate = parts[i];
-    break;
-  }
+if (parts.length > 1) {
+    for (let i = parts.length - 1; i >= 0; i--) {
+        if (parts[i].includes('{')) {
+            jsonTextCandidate = parts[i];
+            break;
+        }
+    }
 }
+
+// CLEANUP: Remove Markdown code blocks if present
+jsonTextCandidate = jsonTextCandidate.replace(/```json/g, "").replace(/```/g, "");
 
 // 2. Find JSON object within the candidate text
 const jsonStart = jsonTextCandidate.indexOf("{");
@@ -205,12 +221,20 @@ function parseAndValidateFinalJSON(jsonText) {
     process.exit(1);
   }
 
+  // Ensure summary exists
+  if (!result.summary) {
+      result.summary = "No summary provided by model.";
+  }
+
+  // Ensure severity exists
+  if (!result.severity) {
+      result.severity = "LOW";
+  }
+
   // ✅ CASE 1: Fully valid schema
   const isValidFinalSchema =
     typeof result === "object" &&
     typeof result.verdict === "string" &&
-    typeof result.severity === "string" &&
-    typeof result.summary === "string" &&
     Array.isArray(result.violations);
 
   if (isValidFinalSchema) {
