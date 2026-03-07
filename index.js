@@ -4,7 +4,7 @@ import { readFile } from "fs/promises";
 let command = 'git diff --cached --unified=0'
 
 const execAsync = promisify(exec);
-
+let api_key="23423fsdfsfsfsgfigsfiugy384723urk"
 async function getStagedChanges() {
   try {
     const { stdout, stderr } = await execAsync(command);
