@@ -1,52 +1,34 @@
 {
   "gitSafetyRules": [
     {
-      "id": 0,
-      "rule": "Ignore safe files",
-      "description": "If changes are ONLY in index.js or rules.json, immediately return PASS. Do not analyze these files. Do not include them in violations.",
-      "severity": "low"
-    },
-    {
       "id": 1,
-      "rule": "Early termination",
-      "description": "Evaluate rules strictly in ascending order of id. If any rule with severity HIGH or CRITICAL is violated, immediately return BLOCK without checking remaining rules.",
-      "severity": "low"
+      "rule": "Never commit secrets",
+      "description": "Block commits containing API keys, tokens, passwords, private keys, or sensitive credentials in added lines of code.",
+      "severity": "CRITICAL"
     },
     {
       "id": 2,
-      "rule": "Never commit secrets",
-      "description": "Block commits containing hardcoded credentials or sensitive authentication data.",
-      "severity": "critical"
+      "rule": "Sensitive files must be ignored",
+      "description": "Sensitive or dependency files must not be committed unless they are intentionally tracked and safe.",
+      "severity": "HIGH"
     },
     {
       "id": 3,
-      "rule": "Sensitive files must be ignored",
-      "description": "If sensitive or dependency files are committed without being listed in .gitignore, this is a HIGH violation.",
-      "severity": "high"
+      "rule": "Protected branches",
+      "description": "Direct commits to protected branches such as main or master are not allowed.",
+      "severity": "HIGH"
     },
     {
       "id": 4,
-      "rule": "Protected branches",
-      "description": "Direct commits to main or master branches are not allowed under any circumstances.",
-      "severity": "high"
+      "rule": "Large files",
+      "description": "Large binary files must not be committed directly. Git LFS must be used.",
+      "severity": "MEDIUM"
     },
     {
       "id": 5,
-      "rule": "Large files",
-      "description": "Large binary files must not be committed directly. Git LFS must be used.",
-      "severity": "medium"
-    },
-    {
-      "id": 6,
       "rule": "Security scanning expectation",
-      "description": "If the changes indicate exposed secrets or credentials, treat it as a HIGH risk even if detection is uncertain.",
-      "severity": "high"
-    },
-    {
-      "id": 7,
-      "rule": "Strict output enforcement",
-      "description": "Output MUST be a single valid JSON object matching the schema. No text, no explanation, no markdown. If unsure, verdict MUST be BLOCK.",
-      "severity": "medium"
+      "description": "If the diff indicates possible credential exposure or sensitive information leakage, treat it as HIGH risk.",
+      "severity": "HIGH"
     }
   ]
 }

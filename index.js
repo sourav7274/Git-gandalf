@@ -92,6 +92,68 @@ function formatRulesForLLM(rules) {
 const rulesText = formatRulesForLLM(myRules.gitSafetyRules);
 // console.log(rulesText);
 
+let systemPrompt = `
+MODE: DETERMINISTIC_SECURITY_ENGINE
+
+You are a Git commit security validator.
+
+You must behave like a strict rule engine.
+
+RULE EXECUTION LOGIC:
+
+1. Read the staged git diff.
+2. Evaluate the rules strictly in ascending order of id.
+3. If any rule is violated:
+   - Immediately stop evaluating further rules.
+   - Return verdict BLOCK.
+4. If no rule is violated:
+   - Return verdict PASS.
+
+SECRET DETECTION RULES:
+
+- Only detect secrets in ADDED lines of the diff (lines starting with +).
+- Deletions of secrets are SAFE.
+
+OUTPUT REQUIREMENTS (STRICT):
+
+- Output MUST be exactly ONE JSON object.
+- No explanations.
+- No reasoning.
+- No markdown.
+- No text before or after JSON.
+
+JSON SCHEMA:
+
+{
+  "verdict": "PASS" | "BLOCK",
+  "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+  "summary": "short explanation",
+  "violations": [
+    {
+      "rule": "string",
+      "description": "string",
+      "files": ["string"],
+      "lines": [number]
+    }
+  ]
+}
+
+CONSTRAINTS:
+
+If verdict = PASS:
+- violations must be []
+
+If verdict = BLOCK:
+- violations must contain exactly the rule that failed.
+
+If unsure:
+- verdict MUST be BLOCK.
+
+RULES:
+${rulesText}
+`
+
+
 console.log("🚀 Calling Ollama...");
 const response = await fetch(
   "http://localhost:11434/api/chat",
@@ -103,22 +165,18 @@ const response = await fetch(
     body: JSON.stringify({
       model: "mistral",
       stream: true,
+      format: "json",
+      options: {
+        temperature: 0
+      },
       messages: [
         {
           role: "system",
-          content: `
-/no_think
-MODE: STRICT_JSON_ONLY
-
-You are a Git pre-commit security validator.
-...
-RULES:
-${rulesText}
-`
+          content: systemPrompt
         },
         {
           role: "user",
-          content: `Staged git diff:${codeChanges}`
+          content: `Staged git diff:\n${codeChanges}`
         }
       ]
     })
