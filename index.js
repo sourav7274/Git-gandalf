@@ -92,6 +92,7 @@ function formatRulesForLLM(rules) {
 const rulesText = formatRulesForLLM(myRules.gitSafetyRules);
 // console.log(rulesText);
 
+console.log("🚀 Calling Ollama...");
 const response = await fetch(
   "http://localhost:11434/api/chat",
   {
@@ -124,6 +125,7 @@ ${rulesText}
   }
 );
 
+console.log("LLM status:", response.status);
 // Stream handling
 const reader = response.body.getReader();
 const decoder = new TextDecoder("utf-8");
