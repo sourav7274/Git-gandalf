@@ -89,7 +89,7 @@ async function readRules(path) {
 
 const myRules = await readRules('rules.json');
 
-const SAFE_FILES = ["index.js", "rules.json", "README.md"];
+const SAFE_FILES = ["index.js", "rules.json", "README.md", ".gitignore"];
 
 function diffOnlyTouchesSafeFiles(diffText) {
   const touchedFiles = new Set();
@@ -101,6 +101,7 @@ function diffOnlyTouchesSafeFiles(diffText) {
     }
   }
   if (touchedFiles.size === 0) return false;
+  
   for (const file of touchedFiles) {
     if (!SAFE_FILES.includes(file)) return false;
   }
@@ -142,62 +143,33 @@ Description: ${rule.description}
 Severity: ${rule.severity}`;
 
   if (rule.rule.toLowerCase().includes("secret") || rule.rule.toLowerCase().includes("credential")) {
+    // Extract only added lines (starts with + but not +++)
+    const addedLines = codeChanges
+      .split('\n')
+      .filter(line => line.startsWith('+') && !line.startsWith('+++') && !line.startsWith('+ '))
+      .map(line => line.slice(1).trim());
+
+    // If no added lines, deleting is allowed
+    if (addedLines.length === 0) {
+      console.log(`   ✓ No new lines added (deletions allowed)`);
+      continue;
+    }
+
+    const linesToCheck = addedLines.join('\n');
+
     ruleCheckPrompt += `
 
-SECRET DETECTION (only check if this rule is about secrets):
-- Only flag ACTUAL secrets in ADDED lines: API keys (20+ random chars), AWS keys (AKIA...), passwords in assignments, private keys (-----BEGIN)
-- Variable names like "yolo", "foo", "api_key" are NOT secrets by themselves
-- Only the VALUE portion that looks like a real secret should be flagged
-- Example: let password = "mysecret123" → flag the "mysecret123" part only
-- Example: let x = "fsdfsdfsdfsdfsfsfsdf" → do NOT flag (not a known secret pattern)`;
+Only check these ADDED lines:
+${linesToCheck}
+
+Rules - flag ONLY if:
+1. A line has "sk-" at start of a quoted string (OpenAI key)
+2. A line has "AKIA" at start of a quoted string (AWS key)  
+3. A line has password="xxx" or password = "xxx" pattern
+
+If none match → return: {"violated": false}`;
+
   }
-
-  if (rule.rule.toLowerCase().includes("large file")) {
-    ruleCheckPrompt += `
-
-LARGE FILES CHECK (important!):
-- Answer: violated: false
-- Code files (.js, .py, .ts, etc.) are NOT large files, even if they have many lines
-- This rule is ONLY for binary files (images, executables) > 1MB that should use Git LFS
-- Text files are NEVER large files in this context
-- The diff shows code, not binary files, so this rule should pass
-- ALWAYS return violated: false for this rule`;
-  }
-
-  if (rule.rule.toLowerCase().includes("protected branch")) {
-    ruleCheckPrompt += `
-
-PROTECTED BRANCH CHECK - NOT APPLICABLE:
-- This rule requires checking current git branch, not analyzing diff
-- Cannot determine from diff alone
-- SKIP this rule - return violated: false`;
-    
-    console.log("   ⏭️  Skipping (requires git branch check)");
-    continue;
-  }
-
-  if (rule.rule.toLowerCase().includes("sensitive file")) {
-    ruleCheckPrompt += `
-
-SENSITIVE FILES CHECK - NOT APPLICABLE:
-- This rule is for file types (.env, .pem), not file content
-- Code files (.js, .py) are never "sensitive files" in this context
-- SKIP this rule - return violated: false`;
-    
-    console.log("   ⏭️  Skipping (not applicable to code files)");
-    continue;
-  }
-
-  ruleCheckPrompt += `
-
-Output ONLY this JSON (no other text):
-{
-  "violated": true/false,
-  "details": "brief description if violated",
-  "files": ["filename if violated"],
-  "line": number if violated,
-  "content": "exact line content if violated"
-}`;
 
   const response = await fetch("http://localhost:11434/api/chat", {
     method: "POST",
@@ -216,7 +188,8 @@ Output ONLY this JSON (no other text):
 
   try {
     const data = await response.json();
-    const result = JSON.parse(data.message?.content || "{}");
+    const rawContent = data.message?.content || "{}";
+    const result = JSON.parse(rawContent);
     
     if (result.violated) {
       console.log(`\n   ❌ FAILED at rule: ${rule.rule}`);
