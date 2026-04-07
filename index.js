@@ -4,7 +4,13 @@ import { readFile } from "fs/promises";
 let command = 'git diff --cached --unified=0'
 
 const execAsync = promisify(exec);
-let api_key="23423fsdfsfsfsgfigsfiugy384723urk"
+
+const args = process.argv.slice(2);
+const forceFlag = args.includes("--force");
+
+if (forceFlag) {
+  console.log("⚠️  --force flag detected. Skipping LLM validation.");
+}
 async function getStagedChanges() {
   try {
     const { stdout, stderr } = await execAsync(command);
@@ -49,6 +55,8 @@ const myRules = await readRules('rules.json');
 // ------------------------------------
 // RULE 0 ENFORCEMENT (JS-side, no LLM)
 // ------------------------------------
+const SAFE_FILES = ["index.js", "rules.json", "README.md"];
+
 function diffOnlyTouchesSafeFiles(diffText) {
   const touchedFiles = new Set();
 
@@ -66,7 +74,7 @@ function diffOnlyTouchesSafeFiles(diffText) {
   if (touchedFiles.size === 0) return false;
 
   for (const file of touchedFiles) {
-    if (file !== "index.js" && file !== "rules.json") {
+    if (!SAFE_FILES.includes(file)) {
       return false;
     }
   }
@@ -74,7 +82,12 @@ function diffOnlyTouchesSafeFiles(diffText) {
   return true;
 }
 if (diffOnlyTouchesSafeFiles(codeChanges)) {
-  console.log("✅ Commit ALLOWED: Only index.js or rules.json changed.");
+  console.log("✅ Commit ALLOWED: Only safe files changed.");
+  process.exit(0);
+}
+
+if (forceFlag) {
+  console.log("✅ Commit ALLOWED: --force bypass.");
   process.exit(0);
 }
 
@@ -111,8 +124,17 @@ RULE EXECUTION LOGIC:
 
 SECRET DETECTION RULES:
 
-- Only detect secrets in ADDED lines of the diff (lines starting with +).
-- Deletions of secrets are SAFE.
+- BLOCK ONLY actual secret VALUES in ADDED lines:
+  - Long alphanumeric strings (20+ chars): API keys, tokens
+  - Passwords in assignment: password = "xxx", pwd = "xxx"
+  - AWS keys: AKIA...
+  - Database URLs with passwords: mysql://user:pass@host
+  - Private keys: -----BEGIN
+- VARIABLES AND NAMES ARE ALWAYS SAFE:
+  - "yolo", "foo", "test", "temp" are just variable names - ALLOW
+  - Generic strings without patterns are SAFE
+  - Only block if it LOOKS LIKE an actual secret
+- Deletions of secrets are SAFE
 
 OUTPUT REQUIREMENTS (STRICT):
 
@@ -163,7 +185,7 @@ const response = await fetch(
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "mistral",
+      model: "gemma:2b",
       stream: true,
       format: "json",
       options: {
