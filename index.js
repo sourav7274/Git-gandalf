@@ -98,39 +98,6 @@ async function readRules(path) {
 
 const myRules = await readRules('rules.json');
 
-const SAFE_FILES = ["index.js", "rules.json", "README.md", ".gitignore"];
-
-function diffOnlyTouchesSafeFiles(diffText) {
-  const touchedFiles = new Set();
-  const lines = diffText.split("\n");
-  for (const line of lines) {
-    if (line.startsWith("+++ b/") || line.startsWith("--- a/")) {
-      const file = line.slice(6).trim();
-      if (file !== "/dev/null") touchedFiles.add(file);
-    }
-  }
-  if (touchedFiles.size === 0) return false;
-  
-  for (const file of touchedFiles) {
-    if (!SAFE_FILES.includes(file)) return false;
-  }
-  return true;
-}
-
-if (diffOnlyTouchesSafeFiles(codeChanges)) {
-  console.log(gandalfArt);
-  console.log("\nYou shall not pass... without my approval!");
-  console.log("\n[OK] Commit ALLOWED: Only safe files changed.");
-  safeExit(0);
-}
-
-if (forceFlag) {
-  console.log(gandalfArt);
-  console.log("\nYou shall not pass... without my approval!");
-  console.log("\n[OK] Commit ALLOWED: --force bypass.");
-  safeExit(0);
-}
-
 const sortedRules = [...myRules.gitSafetyRules].sort((a, b) => {
   return SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
 });
@@ -143,8 +110,6 @@ for (let i = 0; i < sortedRules.length; i++) {
   const rule = sortedRules[i];
   const severityStars = "★".repeat(SEVERITY_ORDER[rule.severity]);
   console.log("\n[" + (i + 1) + "/" + sortedRules.length + "] Checking: " + rule.rule + " " + severityStars);
-  
-  let failed = false;
   
   let ruleCheckPrompt = "Check if the staged diff violates ONLY this rule:\nRule: " + rule.rule + "\nDescription: " + rule.description + "\nSeverity: " + rule.severity;
 
@@ -188,12 +153,10 @@ for (let i = 0; i < sortedRules.length; i++) {
         console.log("   ! " + v.violatingLine.substring(0, 60) + "...");
       }
       console.log("\n[X] You shall not pass!");
-      throw new Error("COMMIT BLOCKED");
+      process.exit(1);
     } else {
       console.log("   [OK] " + (appreciationMessages[rule.severity] || appreciationMessages["LOW"])[Math.floor(Math.random() * 3)]);
     }
-
-    if (failed) break;
   }
 
   if (rule.rule.toLowerCase().includes("format")) {
@@ -202,11 +165,21 @@ for (let i = 0; i < sortedRules.length; i++) {
     let openParens = 0;
     let openBraces = 0;
     let violations = [];
+    let currentFile = "";
     
     for (let i = 0; i < allLines.length; i++) {
       const line = allLines[i];
-      if (line.startsWith('+') || line.startsWith(' ') || line.startsWith('\t')) {
-        for (const char of line) {
+      
+      if (line.startsWith("+++ b/")) {
+        currentFile = line.slice(6).trim();
+        openBrackets = 0;
+        openParens = 0;
+        openBraces = 0;
+      }
+      
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        const codeLine = line.slice(1);
+        for (const char of codeLine) {
           if (char === '{') openBraces++;
           if (char === '}') openBraces--;
           if (char === '(') openParens++;
@@ -215,20 +188,20 @@ for (let i = 0; i < sortedRules.length; i++) {
           if (char === ']') openBrackets--;
         }
         
-        if (line.includes('{') && line.includes('}') && line.indexOf('}') < line.indexOf('{') && !line.includes('//') && !line.includes('/*')) {
-          violations.push("Line " + (i+1) + ": closing brace before opening brace");
+        if (codeLine.includes('{') && codeLine.includes('}') && codeLine.indexOf('}') < codeLine.indexOf('{') && !codeLine.includes('//') && !codeLine.includes('/*')) {
+          violations.push(currentFile + ":" + (i+1) + ": closing brace before opening brace");
         }
       }
     }
     
     if (openBraces !== 0) {
-      violations.push("Unbalanced braces: " + (openBraces > 0 ? "missing " + openBraces + " closing" : "extra " + Math.abs(openBraces) + " closing"));
+      violations.push("File: " + currentFile + " - Unbalanced braces: " + (openBraces > 0 ? "missing " + openBraces + " closing brace(s)" : "extra " + Math.abs(openBraces) + " closing brace(s)"));
     }
     if (openParens !== 0) {
-      violations.push("Unbalanced parentheses: " + (openParens > 0 ? "missing " + openParens + " closing" : "extra " + Math.abs(openParens) + " closing"));
+      violations.push("File: " + currentFile + " - Unbalanced parentheses: " + (openParens > 0 ? "missing " + openParens + " closing paren(s)" : "extra " + Math.abs(openParens) + " closing paren(s)"));
     }
     if (openBrackets !== 0) {
-      violations.push("Unbalanced brackets: " + (openBrackets > 0 ? "missing " + openBrackets + " closing" : "extra " + Math.abs(openBrackets) + " closing"));
+      violations.push("File: " + currentFile + " - Unbalanced brackets: " + (openBrackets > 0 ? "missing " + openBrackets + " closing bracket(s)" : "extra " + Math.abs(openBrackets) + " closing bracket(s)"));
     }
     
     if (violations.length > 0) {
@@ -237,11 +210,8 @@ for (let i = 0; i < sortedRules.length; i++) {
         console.log("   ! " + v);
       }
       console.log("\n[X] You shall not pass!");
-      setTimeout(() => safeExit(1), 100);
-      failed = true;
+      process.exit(1);
     }
-    
-    if (failed) break;
     
     console.log("   [OK] Brackets balanced");
     continue;
@@ -280,8 +250,7 @@ for (let i = 0; i < sortedRules.length; i++) {
       }
       violations.push({ rule: rule, result: result, violationsList: violationsList });
       console.log("\n[X] You shall not pass!");
-      setTimeout(() => safeExit(1), 100);
-      failed = true;
+      process.exit(1);
     } else {
       const msgs = appreciationMessages[rule.severity] || appreciationMessages["LOW"];
       console.log("   " + msgs[Math.floor(Math.random() * msgs.length)]);
@@ -289,8 +258,6 @@ for (let i = 0; i < sortedRules.length; i++) {
   } catch (e) {
     console.log("   Warning: Could not verify rule, assuming passed");
   }
-
-  if (failed) break;
 }
 
 if (exitCalled) {
