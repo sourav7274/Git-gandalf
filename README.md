@@ -10,21 +10,60 @@ A pre-commit hook that uses a local LLM (Ollama) to analyze staged git changes a
 - Safe files bypass (index.js, rules.json, README.md)
 - `--force` flag to bypass validation
 
-## Setup
+## Running the Project
 
-1. Install Ollama and pull a model:
+### Prerequisites
+
+1. **Install Node.js** (v14 or higher)
+2. **Install Ollama** from https://ollama.ai
+3. **Pull the LLM model**:
    ```bash
-   ollama pull gemma:2b
+   ollama pull qwen2.5-coder:3b
    ```
 
-2. Set up the pre-commit hook:
-   ```bash
-   cp .git/hooks/pre-commit .git/hooks/pre-commit.bak  # backup if exists
-   echo 'node index.js' > .git/hooks/pre-commit
-   chmod +x .git/hooks/pre-commit
-   ```
+### Installation
 
-## Usage
+```bash
+# Install dependencies
+npm install
+```
+
+### Run Directly
+
+```bash
+node index.js
+```
+
+### Set Up as Git Pre-commit Hook
+
+```bash
+# Backup existing hook if any
+cp .git/hooks/pre-commit .git/hooks/pre-commit.bak 2>/dev/null || true
+
+# Create the pre-commit hook
+echo 'node index.js' > .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+### Usage
+
+```bash
+# Stage your changes
+git add .
+
+# Try to commit - the hook will analyze staged changes
+git commit -m "my changes"
+
+# If secrets/violations are found, commit will be blocked
+# If passes, commit proceeds normally
+
+# To bypass the validation (force commit)
+git commit --no-verify -m "force commit"
+# or
+node index.js --force
+```
+
+## Features
 
 ```bash
 # Stage files and commit

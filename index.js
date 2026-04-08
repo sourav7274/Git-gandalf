@@ -143,13 +143,11 @@ Description: ${rule.description}
 Severity: ${rule.severity}`;
 
   if (rule.rule.toLowerCase().includes("secret") || rule.rule.toLowerCase().includes("credential")) {
-    // Extract only added lines (starts with + but not +++)
     const addedLines = codeChanges
       .split('\n')
       .filter(line => line.startsWith('+') && !line.startsWith('+++') && !line.startsWith('+ '))
       .map(line => line.slice(1).trim());
 
-    // If no added lines, deleting is allowed
     if (addedLines.length === 0) {
       console.log(`   ✓ No new lines added (deletions allowed)`);
       continue;
