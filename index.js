@@ -56,6 +56,15 @@ const appreciationMessages = {
   "CRITICAL": ["Critical check passed", "Security check cleared", "Critical verification done"]
 };
 
+let exitCalled = false;
+let exitCode = 0;
+
+function safeExit(code) {
+  if (exitCalled) return;
+  exitCalled = true;
+  process.exit(code);
+}
+
 async function getStagedChanges() {
   try {
     const { stdout, stderr } = await execAsync(command);
@@ -74,7 +83,7 @@ if (codeChanges === "There are no staged changes.") {
   console.log(gandalfArt);
   console.log("\nYou shall not pass... without my approval!");
   console.log("\n[OK] No staged changes detected. Commit allowed.");
-  process.exit(0);
+  safeExit(0);
 }
 
 async function readRules(path) {
@@ -112,14 +121,14 @@ if (diffOnlyTouchesSafeFiles(codeChanges)) {
   console.log(gandalfArt);
   console.log("\nYou shall not pass... without my approval!");
   console.log("\n[OK] Commit ALLOWED: Only safe files changed.");
-  process.exit(0);
+  safeExit(0);
 }
 
 if (forceFlag) {
   console.log(gandalfArt);
   console.log("\nYou shall not pass... without my approval!");
   console.log("\n[OK] Commit ALLOWED: --force bypass.");
-  process.exit(0);
+  safeExit(0);
 }
 
 const sortedRules = [...myRules.gitSafetyRules].sort((a, b) => {
@@ -134,6 +143,8 @@ for (let i = 0; i < sortedRules.length; i++) {
   const rule = sortedRules[i];
   const severityStars = "★".repeat(SEVERITY_ORDER[rule.severity]);
   console.log("\n[" + (i + 1) + "/" + sortedRules.length + "] Checking: " + rule.rule + " " + severityStars);
+  
+  let failed = false;
   
   let ruleCheckPrompt = "Check if the staged diff violates ONLY this rule:\nRule: " + rule.rule + "\nDescription: " + rule.description + "\nSeverity: " + rule.severity;
 
@@ -177,22 +188,23 @@ for (let i = 0; i < sortedRules.length; i++) {
         console.log("   ! " + v.violatingLine.substring(0, 60) + "...");
       }
       console.log("\n[X] You shall not pass!");
-      process.exit(1);
+      throw new Error("COMMIT BLOCKED");
+    } else {
+      console.log("   [OK] " + (appreciationMessages[rule.severity] || appreciationMessages["LOW"])[Math.floor(Math.random() * 3)]);
     }
 
-    console.log("   [OK] " + (appreciationMessages[rule.severity] || appreciationMessages["LOW"])[Math.floor(Math.random() * 3)]);
-    continue;
+    if (failed) break;
   }
 
   if (rule.rule.toLowerCase().includes("format")) {
-    const addedLines = codeChanges.split('\n');
+    const allLines = codeChanges.split('\n');
     let openBrackets = 0;
     let openParens = 0;
     let openBraces = 0;
     let violations = [];
     
-    for (let i = 0; i < addedLines.length; i++) {
-      const line = addedLines[i];
+    for (let i = 0; i < allLines.length; i++) {
+      const line = allLines[i];
       if (line.startsWith('+') || line.startsWith(' ') || line.startsWith('\t')) {
         for (const char of line) {
           if (char === '{') openBraces++;
@@ -225,8 +237,11 @@ for (let i = 0; i < sortedRules.length; i++) {
         console.log("   ! " + v);
       }
       console.log("\n[X] You shall not pass!");
-      process.exit(1);
+      setTimeout(() => safeExit(1), 100);
+      failed = true;
     }
+    
+    if (failed) break;
     
     console.log("   [OK] Brackets balanced");
     continue;
@@ -265,7 +280,8 @@ for (let i = 0; i < sortedRules.length; i++) {
       }
       violations.push({ rule: rule, result: result, violationsList: violationsList });
       console.log("\n[X] You shall not pass!");
-      process.exit(1);
+      setTimeout(() => safeExit(1), 100);
+      failed = true;
     } else {
       const msgs = appreciationMessages[rule.severity] || appreciationMessages["LOW"];
       console.log("   " + msgs[Math.floor(Math.random() * msgs.length)]);
@@ -273,10 +289,15 @@ for (let i = 0; i < sortedRules.length; i++) {
   } catch (e) {
     console.log("   Warning: Could not verify rule, assuming passed");
   }
+
+  if (failed) break;
 }
 
-console.log("\n[OK] COMMIT APPROVED");
-console.log("   ----------------------");
-console.log("   The code is worthy.");
-console.log("\nYou may pass, traveler!");
-process.exit(0);
+if (exitCalled) {
+} else {
+  console.log("\n[OK] COMMIT APPROVED");
+  console.log("   ----------------------");
+  console.log("   The code is worthy.");
+  console.log("\nYou may pass, traveler!");
+  safeExit(0);
+}
