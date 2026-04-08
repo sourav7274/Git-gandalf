@@ -62,7 +62,7 @@ let exitCode = 0;
 function safeExit(code) {
   if (exitCalled) return;
   exitCalled = true;
-  setTimeout(() => process.exit(code), 0);
+  setTimeout(() => process.exit(code), 100);
 }
 
 async function getStagedChanges() {
