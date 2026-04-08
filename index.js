@@ -184,6 +184,54 @@ for (let i = 0; i < sortedRules.length; i++) {
     continue;
   }
 
+  if (rule.rule.toLowerCase().includes("format")) {
+    const addedLines = codeChanges.split('\n');
+    let openBrackets = 0;
+    let openParens = 0;
+    let openBraces = 0;
+    let violations = [];
+    
+    for (let i = 0; i < addedLines.length; i++) {
+      const line = addedLines[i];
+      if (line.startsWith('+') || line.startsWith(' ') || line.startsWith('\t')) {
+        for (const char of line) {
+          if (char === '{') openBraces++;
+          if (char === '}') openBraces--;
+          if (char === '(') openParens++;
+          if (char === ')') openParens--;
+          if (char === '[') openBrackets++;
+          if (char === ']') openBrackets--;
+        }
+        
+        if (line.includes('{') && line.includes('}') && line.indexOf('}') < line.indexOf('{') && !line.includes('//') && !line.includes('/*')) {
+          violations.push("Line " + (i+1) + ": closing brace before opening brace");
+        }
+      }
+    }
+    
+    if (openBraces !== 0) {
+      violations.push("Unbalanced braces: " + (openBraces > 0 ? "missing " + openBraces + " closing" : "extra " + Math.abs(openBraces) + " closing"));
+    }
+    if (openParens !== 0) {
+      violations.push("Unbalanced parentheses: " + (openParens > 0 ? "missing " + openParens + " closing" : "extra " + Math.abs(openParens) + " closing"));
+    }
+    if (openBrackets !== 0) {
+      violations.push("Unbalanced brackets: " + (openBrackets > 0 ? "missing " + openBrackets + " closing" : "extra " + Math.abs(openBrackets) + " closing"));
+    }
+    
+    if (violations.length > 0) {
+      console.log("\n   [X] " + rule.rule);
+      for (const v of violations) {
+        console.log("   ! " + v);
+      }
+      console.log("\n[X] You shall not pass!");
+      process.exit(1);
+    }
+    
+    console.log("   [OK] Brackets balanced");
+    continue;
+  }
+
   const response = await fetch("http://localhost:11434/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
