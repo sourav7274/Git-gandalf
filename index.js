@@ -62,7 +62,7 @@ let exitCode = 0;
 function safeExit(code) {
   if (exitCalled) return;
   exitCalled = true;
-  process.exit(code);
+  setTimeout(() => process.exit(code), 0);
 }
 
 async function getStagedChanges() {
@@ -153,7 +153,7 @@ for (let i = 0; i < sortedRules.length; i++) {
         console.log("   ! " + v.violatingLine.substring(0, 60) + "...");
       }
       console.log("\n[X] You shall not pass!");
-      process.exit(1);
+      safeExit(1);
     } else {
       console.log("   [OK] " + (appreciationMessages[rule.severity] || appreciationMessages["LOW"])[Math.floor(Math.random() * 3)]);
     }
@@ -210,7 +210,7 @@ for (let i = 0; i < sortedRules.length; i++) {
         console.log("   ! " + v);
       }
       console.log("\n[X] You shall not pass!");
-      process.exit(1);
+      safeExit(1);
     }
     
     console.log("   [OK] Brackets balanced");
@@ -250,7 +250,7 @@ for (let i = 0; i < sortedRules.length; i++) {
       }
       violations.push({ rule: rule, result: result, violationsList: violationsList });
       console.log("\n[X] You shall not pass!");
-      process.exit(1);
+      safeExit(1);
     } else {
       const msgs = appreciationMessages[rule.severity] || appreciationMessages["LOW"];
       console.log("   " + msgs[Math.floor(Math.random() * msgs.length)]);
