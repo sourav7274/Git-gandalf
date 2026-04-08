@@ -77,6 +77,15 @@ async function getStagedChanges() {
   }
 }
 
+async function getCurrentBranch() {
+  try {
+    const { stdout } = await execAsync('git branch --show-current');
+    return stdout.trim();
+  } catch (err) {
+    return null;
+  }
+}
+
 const codeChanges = await getStagedChanges();
 
 if (codeChanges === "There are no staged changes.") {
@@ -192,9 +201,6 @@ for (let i = 0; i < sortedRules.length; i++) {
           if (char === ']') openBrackets--;
         }
         
-        if (codeLine.includes('{') && codeLine.includes('}') && codeLine.indexOf('}') < codeLine.indexOf('{') && !codeLine.includes('//') && !codeLine.includes('/*')) {
-          violations.push(currentFile + ":" + (i+1) + ": closing brace before opening brace");
-        }
       }
       
       if (line.startsWith('-') && !line.startsWith('---')) {
@@ -231,6 +237,22 @@ for (let i = 0; i < sortedRules.length; i++) {
     
     console.log("   [OK] Brackets balanced");
     continue;
+  }
+
+  if (rule.rule.toLowerCase().includes("protected branch")) {
+    const currentBranch = await getCurrentBranch();
+    const protectedBranches = ['main', 'master'];
+    
+    if (currentBranch && protectedBranches.includes(currentBranch.toLowerCase())) {
+      console.log("\n   [X] " + rule.rule);
+      console.log("   ! Direct commits to protected branch '" + currentBranch + "' are not allowed.");
+      console.log("   ! Please create a feature branch and submit a pull request instead.");
+      console.log("\n[X] You shall not pass!");
+      safeExit(1);
+    } else {
+      console.log("   [OK] Not a protected branch (current: " + (currentBranch || "unknown") + ")");
+      continue;
+    }
   }
 
   const response = await fetch("http://localhost:11434/api/chat", {
