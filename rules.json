@@ -20,15 +20,21 @@
     },
     {
       "id": 4,
+      "rule": "Security scanning expectation",
+      "description": "If the diff indicates possible credential exposure or sensitive information leakage, treat it as HIGH risk.",
+      "severity": "HIGH"
+    },
+    {
+      "id": 5,
       "rule": "Large files",
       "description": "Large binary files must not be committed directly. Git LFS must be used.",
       "severity": "MEDIUM"
     },
     {
-      "id": 5,
-      "rule": "Security scanning expectation",
-      "description": "If the diff indicates possible credential exposure or sensitive information leakage, treat it as HIGH risk.",
-      "severity": "HIGH"
+      "id": 6,
+      "rule": "Code formatting",
+      "description": "Code should follow consistent formatting - check for bracket placement, trailing whitespace, and consistent indentation.",
+      "severity": "LOW"
     }
   ]
 }

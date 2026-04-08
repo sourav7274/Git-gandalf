@@ -9,19 +9,19 @@ const args = process.argv.slice(2);
 const forceFlag = args.includes("--force");
 
 if (forceFlag) {
-  console.log("⚠️  --force flag detected. Skipping LLM validation.");
+  console.log("WARNING: --force flag detected. Skipping LLM validation.");
 }
 
 const gandalfArt = `
                       _,-
    (\\                  _,-','
-    \\\\              ,-"  ,'
+    \\\\.              ,-"  ,'
      \\\\           ,'   ,'
       \\\\        _:.----__.-."-._,-_
        \\\\    .-".:--\`:::::.:.'  )  \`-.
         \\\\   \`. ::L .::::::'\`\`-._  (  ) :
          \\\\    ":::::::'  \`-.   \`-_ ) ,'
-          \\\\.._/\`:::,' \`.     .  \`-:
+          \\\\.._\`:::,' \`.     .  \`-:
           :" _   "\\"" \`-_    .    \`  \`.
            "\\\\"":--\\     \`-.__ \` .     \`.
              \\'::  \\    _-"__\`--.__ \`  . \`.     _,--..-
@@ -50,10 +50,10 @@ const SEVERITY_ORDER = {
 };
 
 const appreciationMessages = {
-  "LOW": ["✨ Minor check passed", "✓ Minor detail noted", "♪ Minor note cleared"],
-  "MEDIUM": ["👍 Medium check passed", "✓ Standard check cleared", "✌ Medium verification done"],
-  "HIGH": ["💪 High check passed", "✓ Important check cleared", "🔥 High priority verified"],
-  "CRITICAL": ["🛡️ Critical check passed", "✓ Security check cleared", "💎 Critical verification done"]
+  "LOW": ["MINOR check passed", "Minor detail noted", "Minor note cleared"],
+  "MEDIUM": ["Medium check passed", "Standard check cleared", "Medium verification done"],
+  "HIGH": ["High check passed", "Important check cleared", "High priority verified"],
+  "CRITICAL": ["Critical check passed", "Security check cleared", "Critical verification done"]
 };
 
 async function getStagedChanges() {
@@ -72,8 +72,8 @@ const codeChanges = await getStagedChanges();
 
 if (codeChanges === "There are no staged changes.") {
   console.log(gandalfArt);
-  console.log("\n🧙‍♂️ You shall not pass... without my approval!");
-  console.log("\n✅ No staged changes detected. Commit allowed.");
+  console.log("\nYou shall not pass... without my approval!");
+  console.log("\n[OK] No staged changes detected. Commit allowed.");
   process.exit(0);
 }
 
@@ -110,37 +110,32 @@ function diffOnlyTouchesSafeFiles(diffText) {
 
 if (diffOnlyTouchesSafeFiles(codeChanges)) {
   console.log(gandalfArt);
-  console.log("\n🧙‍♂️ You shall not pass... without my approval!");
-  console.log("\n✅ Commit ALLOWED: Only safe files changed.");
+  console.log("\nYou shall not pass... without my approval!");
+  console.log("\n[OK] Commit ALLOWED: Only safe files changed.");
   process.exit(0);
 }
 
 if (forceFlag) {
   console.log(gandalfArt);
-  console.log("\n🧙‍♂️ You shall not pass... without my approval!");
-  console.log("\n✅ Commit ALLOWED: --force bypass.");
+  console.log("\nYou shall not pass... without my approval!");
+  console.log("\n[OK] Commit ALLOWED: --force bypass.");
   process.exit(0);
 }
 
 const sortedRules = [...myRules.gitSafetyRules].sort((a, b) => {
-  if (a.severity === "CRITICAL" && b.severity !== "CRITICAL") return -1;
-  if (b.severity === "CRITICAL" && a.severity !== "CRITICAL") return 1;
   return SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
 });
 
 console.log(gandalfArt);
-console.log("\n🧙‍♂️ You shall not pass... without my approval!");
-console.log("\n📜 Checking rules in order of severity...\n");
+console.log("\nYou shall not pass... without my approval!");
+console.log("\nChecking rules in order of severity...\n");
 
 for (let i = 0; i < sortedRules.length; i++) {
   const rule = sortedRules[i];
   const severityStars = "★".repeat(SEVERITY_ORDER[rule.severity]);
-  console.log(`\n[${i + 1}/${sortedRules.length}] Checking: ${rule.rule} ${severityStars}`);
+  console.log("\n[" + (i + 1) + "/" + sortedRules.length + "] Checking: " + rule.rule + " " + severityStars);
   
-  let ruleCheckPrompt = `Check if the staged diff violates ONLY this rule:
-Rule: ${rule.rule}
-Description: ${rule.description}
-Severity: ${rule.severity}`;
+  let ruleCheckPrompt = "Check if the staged diff violates ONLY this rule:\nRule: " + rule.rule + "\nDescription: " + rule.description + "\nSeverity: " + rule.severity;
 
   if (rule.rule.toLowerCase().includes("secret") || rule.rule.toLowerCase().includes("credential")) {
     const addedLines = codeChanges
@@ -149,24 +144,44 @@ Severity: ${rule.severity}`;
       .map(line => line.slice(1).trim());
 
     if (addedLines.length === 0) {
-      console.log(`   ✓ No new lines added (deletions allowed)`);
+       console.log("   [OK] No new lines added (deletions allowed)");
       continue;
     }
 
-    const linesToCheck = addedLines.join('\n');
+    const secretPatterns = [
+      { pattern: /sk[-_][a-zA-Z0-9]{20,}/gi, name: "Stripe/OpenAI key (sk-)" },
+      { pattern: /AKIA[0-9A-Z]{16}/g, name: "AWS key (AKIA)" },
+      { pattern: /password\s*[:=]\s*["'][^"']{4,}/gi, name: "password assignment" },
+      { pattern: /token\s*[:=]\s*["'][^"']{10,}/gi, name: "token assignment" },
+      { pattern: /api[_-]?key\s*[:=]\s*["'][^"']{10,}/gi, name: "api_key assignment" },
+      { pattern: /secret\s*[:=]\s*["'][^"']{10,}/gi, name: "secret assignment" }
+    ];
 
-    ruleCheckPrompt += `
+    let foundViolations = [];
+    for (const line of addedLines) {
+      for (const sp of secretPatterns) {
+        if (sp.pattern.test(line)) {
+          foundViolations.push({
+            files: ["unknown"],
+            line: 0,
+            content: line,
+            violatingLine: line
+          });
+        }
+      }
+    }
 
-Only check these ADDED lines:
-${linesToCheck}
+    if (foundViolations.length > 0) {
+      console.log("\n   [X] " + rule.rule);
+      for (const v of foundViolations) {
+        console.log("   ! " + v.violatingLine.substring(0, 60) + "...");
+      }
+      console.log("\n[X] You shall not pass!");
+      process.exit(1);
+    }
 
-Rules - flag ONLY if:
-1. A line has "sk-" at start of a quoted string (OpenAI key)
-2. A line has "AKIA" at start of a quoted string (AWS key)  
-3. A line has password="xxx" or password = "xxx" pattern
-
-If none match → return: {"violated": false}`;
-
+    console.log("   [OK] " + (appreciationMessages[rule.severity] || appreciationMessages["LOW"])[Math.floor(Math.random() * 3)]);
+    continue;
   }
 
   const response = await fetch("http://localhost:11434/api/chat", {
@@ -179,7 +194,7 @@ If none match → return: {"violated": false}`;
       options: { temperature: 0, num_ctx: 2048 },
       messages: [
         { role: "system", content: ruleCheckPrompt },
-        { role: "user", content: `Staged git diff:\n${codeChanges}` }
+        { role: "user", content: "Staged git diff:\n" + String(codeChanges) }
       ]
     })
   });
@@ -190,27 +205,30 @@ If none match → return: {"violated": false}`;
     const result = JSON.parse(rawContent);
     
     if (result.violated) {
-      console.log(`\n   ❌ FAILED at rule: ${rule.rule}`);
-      if (result.files) console.log(`   ⚠️  ${result.files[0]}:${result.line || "?"} → ${result.content || result.details}`);
-      console.log("\n🛡️  🚫 COMMIT BLOCKED");
-      console.log("   ─────────────────────────");
-      console.log(`   Rule: ${rule.rule}`);
-      if (result.files) console.log(`   File: ${result.files.join(", ")}`);
-      if (result.line) console.log(`   Line: ${result.line}`);
-      if (result.content) console.log(`   Content: ${result.content}`);
-      console.log("\n🧙‍♂️ You shall not pass!");
+      console.log("\n   [X] " + rule.rule);
+      const violationsList = result.violations || [{ files: result.files, line: result.line, content: result.content, violatingLine: result.violatingLine }];
+      for (const v of violationsList) {
+        if (v.files) {
+          console.log("   Warning: " + v.files[0] + ":" + (v.line || "?") + " -> " + (v.content || v.details));
+        }
+        if (v.violatingLine) {
+          console.log("   Line: " + v.violatingLine.replace(/^./, ''));
+        }
+      }
+      violations.push({ rule: rule, result: result, violationsList: violationsList });
+      console.log("\n[X] You shall not pass!");
       process.exit(1);
     } else {
       const msgs = appreciationMessages[rule.severity] || appreciationMessages["LOW"];
-      console.log(`   ${msgs[Math.floor(Math.random() * msgs.length)]}`);
+      console.log("   " + msgs[Math.floor(Math.random() * msgs.length)]);
     }
   } catch (e) {
-    console.log(`   ⚠️  Could not verify rule, assuming passed`);
+    console.log("   Warning: Could not verify rule, assuming passed");
   }
 }
 
-console.log("\n✅  COMMIT APPROVED");
-console.log("   ─────────────────────────");
-console.log("   🧙‍♂️ All rules checked. The code is worthy.");
-console.log("\n✨ You may pass, traveler!");
+console.log("\n[OK] COMMIT APPROVED");
+console.log("   ----------------------");
+console.log("   The code is worthy.");
+console.log("\nYou may pass, traveler!");
 process.exit(0);
