@@ -134,15 +134,19 @@ for (let i = 0; i < sortedRules.length; i++) {
     ];
 
     let foundViolations = [];
+    const seenLines = new Set();
     for (const line of addedLines) {
       for (const sp of secretPatterns) {
         if (sp.pattern.test(line)) {
-          foundViolations.push({
-            files: ["unknown"],
-            line: 0,
-            content: line,
-            violatingLine: line
-          });
+          if (!seenLines.has(line)) {
+            seenLines.add(line);
+            foundViolations.push({
+              files: ["unknown"],
+              line: 0,
+              content: line,
+              violatingLine: line
+            });
+          }
         }
       }
     }
@@ -190,6 +194,18 @@ for (let i = 0; i < sortedRules.length; i++) {
         
         if (codeLine.includes('{') && codeLine.includes('}') && codeLine.indexOf('}') < codeLine.indexOf('{') && !codeLine.includes('//') && !codeLine.includes('/*')) {
           violations.push(currentFile + ":" + (i+1) + ": closing brace before opening brace");
+        }
+      }
+      
+      if (line.startsWith('-') && !line.startsWith('---')) {
+        const codeLine = line.slice(1);
+        for (const char of codeLine) {
+          if (char === '{') openBraces--;
+          if (char === '}') openBraces++;
+          if (char === '(') openParens--;
+          if (char === ')') openParens++;
+          if (char === '[') openBrackets--;
+          if (char === ']') openBrackets++;
         }
       }
     }
