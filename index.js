@@ -179,18 +179,32 @@ for (let i = 0; i < sortedRules.length; i++) {
     let openBraces = 0;
     let violations = [];
     let currentFile = "";
+    let fileHasChanges = false;
     
     for (let i = 0; i < allLines.length; i++) {
       const line = allLines[i];
       
       if (line.startsWith("+++ b/")) {
+        if (currentFile && fileHasChanges) {
+          if (openBraces !== 0) {
+            violations.push("File: " + currentFile + " - Unbalanced braces: " + (openBraces > 0 ? "missing " + openBraces + " closing brace(s)" : "extra " + Math.abs(openBraces) + " closing brace(s)"));
+          }
+          if (openParens !== 0) {
+            violations.push("File: " + currentFile + " - Unbalanced parentheses: " + (openParens > 0 ? "missing " + openParens + " closing paren(s)" : "extra " + Math.abs(openParens) + " closing paren(s)"));
+          }
+          if (openBrackets !== 0) {
+            violations.push("File: " + currentFile + " - Unbalanced brackets: " + (openBrackets > 0 ? "missing " + openBrackets + " closing bracket(s)" : "extra " + Math.abs(openBrackets) + " closing bracket(s)"));
+          }
+        }
         currentFile = line.slice(6).trim();
         openBrackets = 0;
         openParens = 0;
         openBraces = 0;
+        fileHasChanges = false;
       }
       
-      if (line.startsWith('+') && !line.startsWith('+++')) {
+      if (line.startsWith('+') && !line.startsWith('+++') && !line.startsWith('+ ')) {
+        fileHasChanges = true;
         const codeLine = line.slice(1);
         for (const char of codeLine) {
           if (char === '{') openBraces++;
@@ -200,30 +214,19 @@ for (let i = 0; i < sortedRules.length; i++) {
           if (char === '[') openBrackets++;
           if (char === ']') openBrackets--;
         }
-        
-      }
-      
-      if (line.startsWith('-') && !line.startsWith('---')) {
-        const codeLine = line.slice(1);
-        for (const char of codeLine) {
-          if (char === '{') openBraces--;
-          if (char === '}') openBraces++;
-          if (char === '(') openParens--;
-          if (char === ')') openParens++;
-          if (char === '[') openBrackets--;
-          if (char === ']') openBrackets++;
-        }
       }
     }
     
-    if (openBraces !== 0) {
-      violations.push("File: " + currentFile + " - Unbalanced braces: " + (openBraces > 0 ? "missing " + openBraces + " closing brace(s)" : "extra " + Math.abs(openBraces) + " closing brace(s)"));
-    }
-    if (openParens !== 0) {
-      violations.push("File: " + currentFile + " - Unbalanced parentheses: " + (openParens > 0 ? "missing " + openParens + " closing paren(s)" : "extra " + Math.abs(openParens) + " closing paren(s)"));
-    }
-    if (openBrackets !== 0) {
-      violations.push("File: " + currentFile + " - Unbalanced brackets: " + (openBrackets > 0 ? "missing " + openBrackets + " closing bracket(s)" : "extra " + Math.abs(openBrackets) + " closing bracket(s)"));
+    if (currentFile && fileHasChanges) {
+      if (openBraces !== 0) {
+        violations.push("File: " + currentFile + " - Unbalanced braces: " + (openBraces > 0 ? "missing " + openBraces + " closing brace(s)" : "extra " + Math.abs(openBraces) + " closing brace(s)"));
+      }
+      if (openParens !== 0) {
+        violations.push("File: " + currentFile + " - Unbalanced parentheses: " + (openParens > 0 ? "missing " + openParens + " closing paren(s)" : "extra " + Math.abs(openParens) + " closing paren(s)"));
+      }
+      if (openBrackets !== 0) {
+        violations.push("File: " + currentFile + " - Unbalanced brackets: " + (openBrackets > 0 ? "missing " + openBrackets + " closing bracket(s)" : "extra " + Math.abs(openBrackets) + " closing bracket(s)"));
+      }
     }
     
     if (violations.length > 0) {
@@ -236,7 +239,6 @@ for (let i = 0; i < sortedRules.length; i++) {
     }
     
     console.log("   [OK] Brackets balanced");
-    continue;
   }
 
   if (rule.rule.toLowerCase().includes("protected branch")) {
