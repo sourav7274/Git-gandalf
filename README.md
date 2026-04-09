@@ -60,3 +60,21 @@ git commit --no-verify -m "force commit"
 ## Configuration
 
 Edit `rules.json` to customize security rules.
+
+## Testing
+
+Run the validation unit tests:
+```bash
+node test_samples/run_tests.cjs
+```
+
+### Sample Test Files
+
+The `test_samples/` directory contains:
+- `test_balanced_brackets.js` - ✅ Valid code with balanced brackets
+- `test_unbalanced_braces.js` - ❌ Missing closing brace
+- `test_unbalanced_parens.js` - ❌ Unbalanced parentheses
+- `test_api_key.js` - ❌ Contains API key pattern
+- `test_password.js` - ❌ Contains password
+
+These can be staged and committed to manually test the pre-commit hook.
