@@ -215,6 +215,19 @@ for (let i = 0; i < sortedRules.length; i++) {
           if (char === ']') openBrackets--;
         }
       }
+      
+      if (line.startsWith(' ') && !line.startsWith('+ ')) {
+        fileHasChanges = true;
+        const codeLine = line.slice(1);
+        for (const char of codeLine) {
+          if (char === '{') openBraces++;
+          if (char === '}') openBraces--;
+          if (char === '(') openParens++;
+          if (char === ')') openParens--;
+          if (char === '[') openBrackets++;
+          if (char === ']') openBrackets--;
+        }
+      }
     }
     
     if (currentFile && fileHasChanges) {
