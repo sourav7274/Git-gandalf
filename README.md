@@ -68,6 +68,12 @@ Run the validation unit tests:
 node test_samples/run_tests.cjs
 ```
 
+The test suite includes:
+- **Bracket validation tests** - Balanced brackets, braces, parentheses
+- **Secret detection tests** - API keys, passwords, tokens
+- **Excluded files tests** - Verifies index.js and rules.json are skipped
+- **Multi-file tests** - Per-file bracket validation
+
 ### Sample Test Files
 
 The `test_samples/` directory contains:

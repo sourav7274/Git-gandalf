@@ -245,6 +245,112 @@ if (result.length === 0) {
   failed++;
 }
 
+console.log("\n=== EXCLUDED FILES TESTS ===\n");
+
+const excludedFiles = ['index.js', 'rules.json'];
+
+function filterDiff(diff) {
+  const lines = diff.split('\n');
+  let filtered_lines = [];
+  let currentFile = null;
+  let includeCurrentFile = true;
+  
+  for (const line of lines) {
+    if (line.startsWith('+++ b/')) {
+      currentFile = line.slice(6).trim();
+      includeCurrentFile = !excludedFiles.includes(currentFile);
+    }
+    
+    if (includeCurrentFile) {
+      filtered_lines.push(line);
+    }
+  }
+  
+  return filtered_lines.join('\n');
+}
+
+const indexJsDiff = `diff --git a/index.js b/index.js
+--- a/index.js
++++ b/index.js
+@@ -1,3 +1,3 @@
+-const x = 1;
++const password = "secret123";
++return password;`;
+
+let filteredResult1 = filterDiff(indexJsDiff);
+if (filteredResult1.includes("password")) {
+  console.log("✗ FAIL: index.js should have been excluded but was checked");
+  failed++;
+} else if (!filteredResult1.includes("+++ b/index.js")) {
+  console.log("✓ PASS: index.js excluded from validation");
+  passed++;
+} else {
+  console.log("✗ FAIL: index.js exclusion test - got unexpected result");
+  failed++;
+}
+
+const rulesJsonDiff = `diff --git a/rules.json b/rules.json
+--- a/rules.json
++++ b/rules.json
+@@ -1,3 +1,3 @@
+-const x = 1;
++const apiKey = "sk_test_12345678901234567890";
++return apiKey;`;
+
+let filteredResult2 = filterDiff(rulesJsonDiff);
+if (filteredResult2.includes("apiKey")) {
+  console.log("✗ FAIL: rules.json should have been excluded but was checked");
+  failed++;
+} else if (!filteredResult2.includes("+++ b/rules.json")) {
+  console.log("✓ PASS: rules.json excluded from validation");
+  passed++;
+} else {
+  console.log("✗ FAIL: rules.json exclusion test - got unexpected result");
+  failed++;
+}
+
+const normalFileDiff = `diff --git a/myapp.js b/myapp.js
+--- a/myapp.js
++++ b/myapp.js
+@@ -1,3 +1,3 @@
+-const x = 1;
++const password = "secret123";
++return password;`;
+
+let filteredResult3 = filterDiff(normalFileDiff);
+if (filteredResult3.includes("password") && filteredResult3.includes("+++ b/myapp.js")) {
+  console.log("✓ PASS: Non-excluded files are still validated");
+  passed++;
+} else {
+  console.log("✗ FAIL: Non-excluded files test - got unexpected result");
+  failed++;
+}
+
+const mixedDiff = `diff --git a/index.js b/index.js
+--- a/index.js
++++ b/index.js
+@@ -1,3 +1,3 @@
+-const x = 1;
++const password = "secret123";
++diff --git a/myapp.js b/myapp.js
+--- a/myapp.js
++++ b/myapp.js
+@@ -1,3 +1,3 @@
+-const x = 1;
++const password = "secret123";`;
+
+let filteredResult4 = filterDiff(mixedDiff);
+const hasIndexJs = filteredResult4.includes("+++ b/index.js");
+const hasMyApp = filteredResult4.includes("+++ b/myapp.js");
+const hasPassword = filteredResult4.includes("password");
+if (!hasIndexJs && hasMyApp && hasPassword) {
+  console.log("✓ PASS: Mixed diff - excluded filtered, normal file kept");
+  passed++;
+} else {
+  console.log("✗ FAIL: Mixed diff test - got unexpected result, hasIndexJs:", hasIndexJs, "hasMyApp:", hasMyApp);
+  failed++;
+}
+
 console.log("\n=== MULTI-FILE TESTS ===\n");
 
 const multiFileDiff = `diff --git a/file1.js b/file1.js
