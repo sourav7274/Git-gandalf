@@ -7,6 +7,7 @@ const execAsync = promisify(exec);
 
 const args = process.argv.slice(2);
 const forceFlag = args.includes("--force");
+const excludedFiles = ['index.js', 'rules.json','README.md','test_samples/run_tests.cjs'];
 
 if (forceFlag) {
   console.log("WARNING: --force flag detected. Skipping LLM validation.");
@@ -65,6 +66,30 @@ function safeExit(code) {
   setTimeout(() => process.exit(code), 100);
 }
 
+function filterDiff(diff) {
+  const lines = diff.split('\n');
+  let filtered_lines = [];
+  let currentFile = null;
+  let includeCurrentFile = true;
+  
+  for (const line of lines) {
+    // Detect when we enter a new file's diff block
+    if (line.startsWith('+++ b/')) {
+      currentFile = line.slice(6).trim();  // Extract "yolo.js" or "index.js"
+      
+      // Check if this file should be excluded
+      includeCurrentFile = !excludedFiles.includes(currentFile);
+    }
+    
+    // Add ALL lines (not just headers) if file is allowed
+    if (includeCurrentFile) {
+      filtered_lines.push(line);
+    }
+  }
+  
+  return filtered_lines.join('\n');
+}
+
 async function getStagedChanges() {
   try {
     const { stdout, stderr } = await execAsync(command);
@@ -86,7 +111,10 @@ async function getCurrentBranch() {
   }
 }
 
-const codeChanges = await getStagedChanges();
+let codeChanges = await getStagedChanges();
+// console.log("Original staged changes:\n", codeChanges);
+codeChanges = filterDiff(codeChanges);
+// console.log("Filtered staged changes:\n", codeChanges);
 
 if (codeChanges === "There are no staged changes.") {
   console.log(gandalfArt);
