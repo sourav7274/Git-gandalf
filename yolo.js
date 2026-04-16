@@ -6,6 +6,4 @@ let go ="hi"
 
 function test(){
     console.log("test")
-
-
 }
