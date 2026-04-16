@@ -63,7 +63,7 @@ let exitCode = 0;
 function safeExit(code) {
   if (exitCalled) return;
   exitCalled = true;
-  setTimeout(() => process.exit(code), 100);
+  process.exit(code);
 }
 
 function filterDiff(diff) {
@@ -136,8 +136,18 @@ async function readRules(path) {
 const myRules = await readRules('rules.json');
 
 const sortedRules = [...myRules.gitSafetyRules].sort((a, b) => {
-  return SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+  return SEVERITY_ORDER[b.severity] - SEVERITY_ORDER[a.severity];
 });
+
+const stagedFiles = codeChanges
+  .split('\n')
+  .filter(line => line.startsWith('+++ b/'))
+  .map(line => line.slice(6).trim());
+
+const hasNonTestFiles = stagedFiles.some(f => 
+  !f.includes('test') && !f.includes('Test') && !f.endsWith('.test.js') && !f.endsWith('.spec.js')
+);
+const hasOnlyTestFiles = stagedFiles.length > 0 && !hasNonTestFiles;
 
 console.log(gandalfArt);
 console.log("\nYou shall not pass... without my approval!");
@@ -153,7 +163,7 @@ for (let i = 0; i < sortedRules.length; i++) {
   if (rule.rule.toLowerCase().includes("secret") || rule.rule.toLowerCase().includes("credential")) {
     const addedLines = codeChanges
       .split('\n')
-      .filter(line => line.startsWith('+') && !line.startsWith('+++') && !line.startsWith('+ '))
+      .filter(line => line.startsWith('+') && !line.startsWith('+++'))
       .map(line => line.slice(1).trim());
 
     if (addedLines.length === 0) {
@@ -231,7 +241,7 @@ for (let i = 0; i < sortedRules.length; i++) {
         fileHasChanges = false;
       }
       
-      if (line.startsWith('+') && !line.startsWith('+++') && !line.startsWith('+ ')) {
+      if (line.startsWith('+') && !line.startsWith('+++')) {
         fileHasChanges = true;
         const codeLine = line.slice(1);
         for (const char of codeLine) {
@@ -244,7 +254,7 @@ for (let i = 0; i < sortedRules.length; i++) {
         }
       }
       
-      if (line.startsWith(' ') && !line.startsWith('+ ')) {
+      if (line.startsWith(' ') && !line.startsWith('+++')) {
         fileHasChanges = true;
         const codeLine = line.slice(1);
         for (const char of codeLine) {
@@ -296,6 +306,11 @@ for (let i = 0; i < sortedRules.length; i++) {
       console.log("   [OK] Not a protected branch (current: " + (currentBranch || "unknown") + ")");
       continue;
     }
+  }
+
+  if (!hasOnlyTestFiles) {
+    console.log("   [OK] Skipping Ollama (not ONLY test files)");
+    continue;
   }
 
   const response = await fetch("http://localhost:11434/api/chat", {
