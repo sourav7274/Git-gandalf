@@ -1,6 +1,7 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { readFile } from "fs/promises";
+import readline from "readline";
 let command = 'git diff --cached'
 
 const execAsync = promisify(exec);
@@ -379,7 +380,6 @@ if (exitCalled) {
   let shouldSuggest = suggestFlag;
 
   if (!shouldSuggest) {
-    const readline = require("readline");
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     
     const question = (p) => new Promise((resolve) => rl.question(p, resolve));
