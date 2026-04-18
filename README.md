@@ -57,6 +57,16 @@ To bypass validation:
 git commit --no-verify -m "force commit"
 ```
 
+#### Code Suggestion Flags
+
+- `--suggest` - Automatically generate code suggestions after a successful commit
+- `--skip-suggestions` - Skip code suggestions (useful when you don't want AI suggestions)
+
+Example:
+```bash
+git commit -m "my changes" -- --suggest
+```
+
 ## Configuration
 
 Edit `rules.json` to customize security rules.
