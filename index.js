@@ -1,17 +1,35 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { readFile } from "fs/promises";
+import readline from "readline";
 let command = 'git diff --cached'
 
 const execAsync = promisify(exec);
 
 const args = process.argv.slice(2);
 const forceFlag = args.includes("--force");
+const skipSuggestionsFlag = args.includes("--skip-suggestions");
+const suggestFlag = args.includes("--suggest");
+const helpFlag = args.includes("--help");
 const excludedFiles = ['index.js', 'rules.json','README.md','test_samples/run_tests.cjs'];
+
+if (helpFlag) {
+  console.log(`Gandalf - Git Commit Guardian
+Usage: node index.js [options]
+
+Options:
+  --force              Skip LLM validation (not recommended)
+  --skip-suggestions   Skip code suggestions after commit approval
+  --suggest            Automatically generate code suggestions
+  --help               Show this help message`);
+  process.exit(0);
+}
 
 if (forceFlag) {
   console.log("WARNING: --force flag detected. Skipping LLM validation.");
 }
+
+async function main() {
 
 const gandalfArt = `
                       _,-
@@ -58,12 +76,11 @@ const appreciationMessages = {
 };
 
 let exitCalled = false;
-let exitCode = 0;
 
 function safeExit(code) {
   if (exitCalled) return;
   exitCalled = true;
-  setTimeout(() => process.exit(code), 100);
+  process.exit(code);
 }
 
 function filterDiff(diff) {
@@ -73,15 +90,11 @@ function filterDiff(diff) {
   let includeCurrentFile = true;
   
   for (const line of lines) {
-    // Detect when we enter a new file's diff block
     if (line.startsWith('+++ b/')) {
-      currentFile = line.slice(6).trim();  // Extract "yolo.js" or "index.js"
-      
-      // Check if this file should be excluded
+      currentFile = line.slice(6).trim();
       includeCurrentFile = !excludedFiles.includes(currentFile);
     }
     
-    // Add ALL lines (not just headers) if file is allowed
     if (includeCurrentFile) {
       filtered_lines.push(line);
     }
@@ -112,9 +125,7 @@ async function getCurrentBranch() {
 }
 
 let codeChanges = await getStagedChanges();
-// console.log("Original staged changes:\n", codeChanges);
 codeChanges = filterDiff(codeChanges);
-// console.log("Filtered staged changes:\n", codeChanges);
 
 if (codeChanges === "There are no staged changes.") {
   console.log(gandalfArt);
@@ -136,8 +147,18 @@ async function readRules(path) {
 const myRules = await readRules('rules.json');
 
 const sortedRules = [...myRules.gitSafetyRules].sort((a, b) => {
-  return SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+  return SEVERITY_ORDER[b.severity] - SEVERITY_ORDER[a.severity];
 });
+
+const stagedFiles = codeChanges
+  .split('\n')
+  .filter(line => line.startsWith('+++ b/'))
+  .map(line => line.slice(6).trim());
+
+const hasNonTestFiles = stagedFiles.some(f => 
+  !f.includes('test') && !f.includes('Test') && !f.endsWith('.test.js') && !f.endsWith('.spec.js')
+);
+const hasOnlyTestFiles = stagedFiles.length > 0 && !hasNonTestFiles;
 
 console.log(gandalfArt);
 console.log("\nYou shall not pass... without my approval!");
@@ -153,7 +174,7 @@ for (let i = 0; i < sortedRules.length; i++) {
   if (rule.rule.toLowerCase().includes("secret") || rule.rule.toLowerCase().includes("credential")) {
     const addedLines = codeChanges
       .split('\n')
-      .filter(line => line.startsWith('+') && !line.startsWith('+++') && !line.startsWith('+ '))
+      .filter(line => line.startsWith('+') && !line.startsWith('+++'))
       .map(line => line.slice(1).trim());
 
     if (addedLines.length === 0) {
@@ -231,7 +252,7 @@ for (let i = 0; i < sortedRules.length; i++) {
         fileHasChanges = false;
       }
       
-      if (line.startsWith('+') && !line.startsWith('+++') && !line.startsWith('+ ')) {
+      if (line.startsWith('+') && !line.startsWith('+++')) {
         fileHasChanges = true;
         const codeLine = line.slice(1);
         for (const char of codeLine) {
@@ -244,16 +265,16 @@ for (let i = 0; i < sortedRules.length; i++) {
         }
       }
       
-      if (line.startsWith(' ') && !line.startsWith('+ ')) {
+      if (line.startsWith('-') && !line.startsWith('---')) {
         fileHasChanges = true;
         const codeLine = line.slice(1);
         for (const char of codeLine) {
-          if (char === '{') openBraces++;
-          if (char === '}') openBraces--;
-          if (char === '(') openParens++;
-          if (char === ')') openParens--;
-          if (char === '[') openBrackets++;
-          if (char === ']') openBrackets--;
+          if (char === '{') openBraces--;
+          if (char === '}') openBraces++;
+          if (char === '(') openParens--;
+          if (char === ')') openParens++;
+          if (char === '[') openBrackets--;
+          if (char === ']') openBrackets++;
         }
       }
     }
@@ -298,6 +319,11 @@ for (let i = 0; i < sortedRules.length; i++) {
     }
   }
 
+  if (!hasOnlyTestFiles) {
+    console.log("   [OK] Skipping Ollama (not ONLY test files)");
+    continue;
+  }
+
   const response = await fetch("http://localhost:11434/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -329,7 +355,6 @@ for (let i = 0; i < sortedRules.length; i++) {
           console.log("   Line: " + v.violatingLine.replace(/^./, ''));
         }
       }
-      violations.push({ rule: rule, result: result, violationsList: violationsList });
       console.log("\n[X] You shall not pass!");
       safeExit(1);
     } else {
@@ -346,6 +371,82 @@ if (exitCalled) {
   console.log("\n[OK] COMMIT APPROVED");
   console.log("   ----------------------");
   console.log("   The code is worthy.");
+
+  if (skipSuggestionsFlag) {
+    console.log("\nYou may pass, traveler!");
+    safeExit(0);
+  }
+
+  let shouldSuggest = suggestFlag;
+
+  if (!shouldSuggest) {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    
+    const question = (p) => new Promise((resolve) => rl.question(p, resolve));
+    
+    const answer = await question("\nWould you like code suggestions? [y/N] ");
+    rl.close();
+    shouldSuggest = answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes";
+  }
+
+  if (shouldSuggest) {
+    console.log("\nGenerating code suggestions...");
+    const suggestionPrompt = `Analyze the following git diff and provide suggestions that either:
+1. Shorten/optimize the code (reduce lines while maintaining functionality)
+2. Fix issues/bugs in the code
+
+For each suggestion, provide:
+- File name and line number
+- Brief explanation
+- The suggested code change
+
+Git diff:
+${codeChanges}`;
+
+    try {
+      const response = await fetch("http://localhost:11434/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "qwen2.5-coder:3b",
+          stream: false,
+          format: "json",
+          options: { temperature: 0, num_ctx: 2048 },
+          messages: [
+            { role: "system", content: "You are a code reviewer. Provide concise, actionable suggestions to improve code. Only respond with valid JSON array format: [{\"file\": \"filename\", \"line\": lineNum, \"explanation\": \"brief explanation\", \"suggestion\": \"suggested code\"}]" },
+            { role: "user", content: suggestionPrompt }
+          ]
+        })
+      });
+
+      const data = await response.json();
+      const suggestions = data.message?.content || "[]";
+      
+      try {
+        const parsed = JSON.parse(suggestions);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          console.log("\n=== CODE SUGGESTIONS ===\n");
+          for (const s of parsed) {
+            console.log(`📁 ${s.file}:${s.line}`);
+            console.log(`   Explanation: ${s.explanation}`);
+            console.log(`   Suggestion: ${s.suggestion}\n`);
+          }
+        } else {
+          console.log("\nNo suggestions found for this diff.");
+        }
+      } catch {
+        console.log("\nSuggestions:");
+        console.log(suggestions);
+      }
+    } catch (e) {
+      console.log("\nCould not generate suggestions. Make sure Ollama is running.");
+    }
+  }
+
   console.log("\nYou may pass, traveler!");
   safeExit(0);
 }
+
+}
+
+main();

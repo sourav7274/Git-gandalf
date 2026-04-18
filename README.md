@@ -57,6 +57,16 @@ To bypass validation:
 git commit --no-verify -m "force commit"
 ```
 
+#### Code Suggestion Feature
+
+Use the `GIT_SUGGEST` environment variable to enable code checking and suggestions:
+
+```bash
+GIT_SUGGEST=1 git commit -m "my changes"
+```
+
+By default, commits skip the code checks.
+
 ## Configuration
 
 Edit `rules.json` to customize security rules.
