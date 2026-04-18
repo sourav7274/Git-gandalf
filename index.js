@@ -183,7 +183,8 @@ for (let i = 0; i < sortedRules.length; i++) {
     }
 
     const secretPatterns = [
-      { pattern: /sk[-_][a-zA-Z0-9]{20,}/gi, name: "Stripe/OpenAI key (sk-)" },
+      { pattern: /sk[-_][a-zA-Z0-9,]+/gi, name: "Stripe/OpenAI key (sk-)" },
+      { pattern: /sk[-_][a-zA-Z0-9]{8,}/gi, name: "Stripe/OpenAI key (sk-)" },
       { pattern: /AKIA[0-9A-Z]{16}/g, name: "AWS key (AKIA)" },
       { pattern: /password\s*[:=]\s*["'][^"']{4,}/gi, name: "password assignment" },
       { pattern: /token\s*[:=]\s*["'][^"']{10,}/gi, name: "token assignment" },
