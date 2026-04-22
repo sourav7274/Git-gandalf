@@ -155,10 +155,7 @@ const stagedFiles = codeChanges
   .filter(line => line.startsWith('+++ b/'))
   .map(line => line.slice(6).trim());
 
-const hasNonTestFiles = stagedFiles.some(f => 
-  !f.includes('test') && !f.includes('Test') && !f.endsWith('.test.js') && !f.endsWith('.spec.js')
-);
-const hasOnlyTestFiles = stagedFiles.length > 0 && !hasNonTestFiles;
+
 
 console.log(gandalfArt);
 console.log("\nYou shall not pass... without my approval!");
@@ -320,10 +317,6 @@ for (let i = 0; i < sortedRules.length; i++) {
     }
   }
 
-  if (!hasOnlyTestFiles) {
-    console.log("   [OK] Skipping Ollama (not ONLY test files)");
-    continue;
-  }
 
   const response = await fetch("http://localhost:11434/api/chat", {
     method: "POST",
