@@ -456,7 +456,12 @@ ${codeChanges}`;
             } else {
               console.log(`📁 ${s.file}:${s.line}`);
               console.log(`   Explanation: ${s.explanation}`);
-              console.log(`   Suggestion: ${s.suggestion}\n`);
+              if (s.original && s.refactored) {
+                console.log(`   Original:\n   ${s.original.split('\n').join('\n   ')}`);
+                console.log(`   Refactored:\n   ${s.refactored.split('\n').join('\n   ')}\n`);
+              } else {
+                console.log(`   Suggestion: ${s.suggestion}\n`);
+              }
             }
           }
           
