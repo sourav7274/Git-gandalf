@@ -408,6 +408,8 @@ IMPORTANT: If code can be optimized (e.g., repeated statements → loop), always
 1. Shorten/optimize the code (reduce lines while maintaining functionality)
 2. Fix issues/bugs in the code
 
+IMPORTANT: Look for code duplication, repeated statements, and opportunities to use loops or helper functions. Even if the code seems OK, always try to find at least one optimization opportunity. The diff should be small for new files.
+
 For each suggestion, provide:
 - File name and line number
 - Brief explanation
@@ -441,7 +443,8 @@ ${codeChanges}`;
       
       try {
         const parsed = JSON.parse(suggestions);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        const suggestionsArray = Array.isArray(parsed) ? parsed : [parsed];
+        if (Array.isArray(suggestionsArray) && suggestionsArray.length > 0) {
           console.log("\n=== " + (isApplyMode ? "REFACTORING SUGGESTIONS" : "CODE SUGGESTIONS") + " ===\n");
           
           for (const s of parsed) {
