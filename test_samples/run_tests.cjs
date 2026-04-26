@@ -1,4 +1,8 @@
 const assert = require('assert');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
+const fs = require('fs');
 
 function checkBrackets(codeChanges) {
   const allLines = codeChanges.split('\n');
@@ -385,9 +389,148 @@ console.log("\n=== SUMMARY ===");
 console.log(`Passed: ${passed}/${passed + failed}`);
 console.log(`Failed: ${failed}/${passed + failed}`);
 
-if (failed > 0) {
-  process.exit(1);
-} else {
-  console.log("\n✓ All tests passed!");
-  process.exit(0);
+async function runLLMTests() {
+  console.log("\n=== LLM RULE VALIDATION TESTS ===\n");
+  
+  const testDir = __dirname;
+  const testCases = [
+    {
+      name: testDir + "/test_api_key.js",
+      expectedViolation: true,
+      description: "Should detect API key violation"
+    },
+    {
+      name: testDir + "/test_password.js",
+      expectedViolation: true,
+      description: "Should detect password violation"
+    },
+    {
+      name: testDir + "/test_balanced_brackets.js",
+      expectedViolation: false,
+      description: "Should pass (no issues)"
+    }
+  ];
+  
+  for (const testCase of testCases) {
+    const testFilePath = testCase.name;
+    try {
+      const fileContent = fs.readFileSync(testFilePath, 'utf8');
+      const fileName = testFilePath.split('/').pop();
+      const diff = `diff --git a/${fileName} b/${fileName}
+--- a/${fileName}
++++ b/${fileName}
+@@ -1,3 +1,4 @@
+ ${fileContent.split('\n').map((line, i) => (i > 0 ? '+' : '') + line).join('\n')}`;
+      
+      const response = await fetch("http://localhost:11434/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "qwen2.5-coder:3b",
+          stream: false,
+          format: "json",
+          options: { temperature: 0, num_ctx: 2048 },
+          messages: [
+            { role: "system", content: "Check if the staged diff violates this rule: No secrets in code. Check for API keys, passwords, tokens, secrets in the code. Return JSON: {\"violated\": true/false, \"violations\": [{\"content\": \"brief description\"}]}" },
+            { role: "user", content: "Staged git diff:\n" + diff }
+          ]
+        })
+      });
+      
+      const data = await response.json();
+      const rawContent = data.message?.content || "{}";
+      const result = JSON.parse(rawContent);
+      const hasViolation = result.violated === true;
+      
+      if (hasViolation === testCase.expectedViolation) {
+        console.log(`✓ PASS: ${testCase.description}`);
+        passed++;
+      } else {
+        console.log(`✗ FAIL: ${testCase.description} - Expected: ${testCase.expectedViolation}, Got: ${hasViolation}`);
+        failed++;
+      }
+    } catch (err) {
+      console.log(`✗ FAIL: ${testCase.description} - Error: ${err.message}`);
+      failed++;
+    }
+  }
+  
+  console.log("\n=== LLM SUGGESTION TESTS ===\n");
+  
+  const suggestionTestCases = [
+    {
+      name: testDir + "/test_unbalanced_braces.js",
+      checkFor: "unbalanced braces",
+      description: "Should suggest fix for unbalanced braces"
+    },
+    {
+      name: testDir + "/test_unbalanced_parens.js",
+      checkFor: "unbalanced parentheses",
+      description: "Should suggest fix for unbalanced parens"
+    }
+  ];
+  
+  for (const testCase of suggestionTestCases) {
+    try {
+      const fileContent = fs.readFileSync(testCase.name, 'utf8');
+      const fileName = testCase.name.split('/').pop();
+      const diff = `diff --git a/${fileName} b/${fileName}
+--- a/${fileName}
++++ b/${fileName}
+@@ -1,3 +1,4 @@
+ ${fileContent.split('\n').map((line, i) => (i > 0 ? '+' : '') + line).join('\n')}`;
+      
+      const response = await fetch("http://localhost:11434/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "qwen2.5-coder:3b",
+          stream: false,
+          format: "json",
+          options: { temperature: 0, num_ctx: 2048 },
+          messages: [
+            { role: "system", content: "Analyze the following diff and provide suggestions to fix issues. Focus on: " + testCase.checkFor + ". Return JSON array: [{\"file\": \"filename\", \"line\": lineNum, \"explanation\": \"what to fix\", \"suggestion\": \"code fix\"}]" },
+            { role: "user", content: "Git diff:\n" + diff }
+          ]
+        })
+      });
+      
+      const data = await response.json();
+      const suggestionContent = data.message?.content || "[]";
+      
+      try {
+        const parsed = JSON.parse(suggestionContent);
+        const suggestions = Array.isArray(parsed) ? parsed : [parsed];
+        if (suggestions && suggestions.length > 0 && suggestions[0]) {
+          console.log(`✓ PASS: ${testCase.description} - Got suggestion`);
+          passed++;
+        } else {
+          console.log(`✗ FAIL: ${testCase.description} - No suggestions`);
+          failed++;
+        }
+      } catch {
+        console.log(`✗ FAIL: ${testCase.description} - Invalid JSON`);
+        failed++;
+      }
+    } catch (err) {
+      console.log(`✗ FAIL: ${testCase.description} - Error: ${err.message}`);
+      failed++;
+    }
+  }
 }
+
+runLLMTests().then(() => {
+  console.log("\n=== FINAL SUMMARY ===");
+  console.log(`Passed: ${passed}/${passed + failed}`);
+  console.log(`Failed: ${failed}/${passed + failed}`);
+
+  if (failed > 0) {
+    process.exit(1);
+  } else {
+    console.log("\n✓ All tests passed!");
+    process.exit(0);
+  }
+}).catch(err => {
+  console.log("LLM tests error:", err.message);
+  process.exit(1);
+});

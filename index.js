@@ -1,6 +1,6 @@
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFile } from "fs/promises";
+import { readFile, writeFile } from "fs/promises";
 import readline from "readline";
 let command = 'git diff --cached'
 
@@ -9,7 +9,8 @@ const execAsync = promisify(exec);
 const args = process.argv.slice(2);
 const forceFlag = args.includes("--force");
 const skipSuggestionsFlag = args.includes("--skip-suggestions");
-const suggestFlag = args.includes("--suggest");
+const suggestFlag = args.includes("--suggest") || process.env.GIT_SUGGEST === "1";
+const applyFlag = args.includes("--apply");
 const helpFlag = args.includes("--help");
 const excludedFiles = ['index.js', 'rules.json','README.md','test_samples/run_tests.cjs'];
 
@@ -21,6 +22,7 @@ Options:
   --force              Skip LLM validation (not recommended)
   --skip-suggestions   Skip code suggestions after commit approval
   --suggest            Automatically generate code suggestions
+  --apply               Apply code suggestions with confirmation
   --help               Show this help message`);
   process.exit(0);
 }
@@ -371,7 +373,7 @@ if (exitCalled) {
     safeExit(0);
   }
 
-  let shouldSuggest = suggestFlag;
+  let shouldSuggest = suggestFlag || applyFlag;
 
   if (!shouldSuggest) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -384,8 +386,25 @@ if (exitCalled) {
   }
 
   if (shouldSuggest) {
-    console.log("\nGenerating code suggestions...");
-    const suggestionPrompt = `Analyze the following git diff and provide suggestions that either:
+    const isApplyMode = applyFlag;
+    console.log("\n" + (isApplyMode ? "Generating and applying code refactoring..." : "Generating code suggestions..."));
+    
+    const suggestionPrompt = isApplyMode 
+      ? `Analyze the following git diff and provide refactoring suggestions that:
+1. Shorten/optimize the code (convert repeated code into loops, reduce duplication)
+2. Fix issues/bugs in the code
+3. Maintain exact functionality
+
+For each suggestion, provide:
+- File name (must match staged files)
+- Line number (starting line)
+- Brief explanation
+- Original code (the exact code to replace)
+- Refactored code (the improved code)
+
+IMPORTANT: If code can be optimized (e.g., repeated statements → loop), always provide the refactored version. Format your response as a JSON array:
+[{"file": "filename", "line": lineNum, "explanation": "brief explanation", "original": "exact original code", "refactored": "improved code"}]`
+      : `Analyze the following git diff and provide suggestions that either:
 1. Shorten/optimize the code (reduce lines while maintaining functionality)
 2. Fix issues/bugs in the code
 
@@ -397,6 +416,10 @@ For each suggestion, provide:
 Git diff:
 ${codeChanges}`;
 
+    const systemPrompt = isApplyMode
+      ? "You are a code refactoring assistant. Provide concise, actionable refactoring suggestions. Always optimize repeated code into loops. Only respond with valid JSON array format: [{\"file\": \"filename\", \"line\": lineNum, \"explanation\": \"brief explanation\", \"original\": \"exact original code\", \"refactored\": \"improved code\"}]"
+      : "You are a code reviewer. Provide concise, actionable suggestions to improve code. Only respond with valid JSON array format: [{\"file\": \"filename\", \"line\": lineNum, \"explanation\": \"brief explanation\", \"suggestion\": \"suggested code\"}]";
+
     try {
       const response = await fetch("http://localhost:11434/api/chat", {
         method: "POST",
@@ -407,7 +430,7 @@ ${codeChanges}`;
           format: "json",
           options: { temperature: 0, num_ctx: 2048 },
           messages: [
-            { role: "system", content: "You are a code reviewer. Provide concise, actionable suggestions to improve code. Only respond with valid JSON array format: [{\"file\": \"filename\", \"line\": lineNum, \"explanation\": \"brief explanation\", \"suggestion\": \"suggested code\"}]" },
+            { role: "system", content: systemPrompt },
             { role: "user", content: suggestionPrompt }
           ]
         })
@@ -419,21 +442,106 @@ ${codeChanges}`;
       try {
         const parsed = JSON.parse(suggestions);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          console.log("\n=== CODE SUGGESTIONS ===\n");
+          console.log("\n=== " + (isApplyMode ? "REFACTORING SUGGESTIONS" : "CODE SUGGESTIONS") + " ===\n");
+          
           for (const s of parsed) {
-            console.log(`📁 ${s.file}:${s.line}`);
-            console.log(`   Explanation: ${s.explanation}`);
-            console.log(`   Suggestion: ${s.suggestion}\n`);
+            if (isApplyMode) {
+              console.log(`📁 ${s.file}:${s.line}`);
+              console.log(`   Explanation: ${s.explanation}`);
+              console.log(`   Original:\n   ${(s.original || "").split('\n').join('\n   ')}`);
+              console.log(`   Refactored:\n   ${(s.refactored || "").split('\n').join('\n   ')}\n`);
+            } else {
+              console.log(`📁 ${s.file}:${s.line}`);
+              console.log(`   Explanation: ${s.explanation}`);
+              console.log(`   Suggestion: ${s.suggestion}\n`);
+            }
+          }
+          
+          if (isApplyMode) {
+            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+            const question = (p) => new Promise((resolve) => rl.question(p, resolve));
+            
+            const confirm = await question("\nApply these refactoring suggestions? [y/N] ");
+            rl.close();
+            
+            if (confirm.trim().toLowerCase() === "y" || confirm.trim().toLowerCase() === "yes") {
+              console.log("\nApplying refactoring...");
+              
+              const backupFiles = [];
+              
+              for (const s of parsed) {
+                try {
+                  const backupPath = s.file + '.backup';
+                  const originalContent = await readFile(s.file, 'utf8');
+                  await writeFile(backupPath, originalContent);
+                  backupFiles.push(backupPath);
+                  
+                  let newContent = originalContent;
+                  if (s.original && s.refactored) {
+                    newContent = newContent.split(s.original).join(s.refactored);
+                  }
+                  
+                  await writeFile(s.file, newContent);
+                  console.log(`   ✓ Applied to ${s.file}`);
+                } catch (err) {
+                  console.log(`   ✗ Failed to apply to ${s.file}: ${err.message}`);
+                }
+              }
+              
+              console.log("\nRunning tests...");
+              let testsPassed = true;
+              try {
+                const { stdout, stderr } = await execAsync('npm test');
+                console.log(stdout);
+                if (stderr) console.error(stderr);
+              } catch (err) {
+                testsPassed = false;
+                console.log(`   Tests failed: ${err.message}`);
+              }
+              
+              if (!testsPassed) {
+                console.log("\n⚠ Tests failed. Rolling back...");
+                for (const backup of backupFiles) {
+                  const originalPath = backup.replace('.backup', '');
+                  try {
+                    const backupContent = await readFile(backup, 'utf8');
+                    await writeFile(originalPath, backupContent);
+                    console.log(`   ✓ Rolled back ${originalPath}`);
+                  } catch (err) {
+                    console.log(`   ✗ Failed to rollback ${originalPath}: ${err.message}`);
+                  }
+                }
+                console.log("\n[X] Refactoring failed. Changes rolled back.");
+                safeExit(1);
+              } else {
+                console.log("\n✓ Tests passed! Refactoring applied successfully.");
+                console.log("\n[OK] You may pass, traveler!");
+                safeExit(0);
+              }
+            } else {
+              console.log("\nRefactoring skipped.");
+              console.log("\nYou may pass, traveler!");
+              safeExit(0);
+            }
+          } else {
+            console.log("\nYou may pass, traveler!");
+            safeExit(0);
           }
         } else {
           console.log("\nNo suggestions found for this diff.");
+          console.log("\nYou may pass, traveler!");
+          safeExit(0);
         }
       } catch {
         console.log("\nSuggestions:");
         console.log(suggestions);
+        console.log("\nYou may pass, traveler!");
+        safeExit(0);
       }
     } catch (e) {
       console.log("\nCould not generate suggestions. Make sure Ollama is running.");
+      console.log("\nYou may pass, traveler!");
+      safeExit(0);
     }
   }
 
